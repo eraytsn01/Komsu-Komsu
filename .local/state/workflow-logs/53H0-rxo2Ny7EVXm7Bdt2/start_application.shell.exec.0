@@ -1,0 +1,13 @@
+[1G[0K⠙[1G[0K
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0K⠙[1G[0K12:13:46 PM [express] serving on port 5000
+12:23:29 PM [express] GET /api/auth/me 304 in 16ms :: {"id":4,"firstName":"Eray","lastName":"Tosun","phone":"+905340119800","email":"eray.tsn@hotmail.com","locationCode":"0136084025007","buildingId":2,"avatarUrl":null,"latitude":null,"longitude":null,"isAdmin":false,"isApproved":true,"createdAt":"2026-03-13T21:02:08.073Z"}
+12:23:29 PM [express] GET /api/statuses 304 in 13ms :: []
+12:23:29 PM [express] GET /api/emergency 304 in 17ms :: []
+12:23:35 PM [express] GET /api/emergency 304 in 8ms :: []
+12:23:40 PM [express] GET /api/emergency 304 in 7ms :: []
+12:23:45 PM [express] GET /api/emergency 304 in 8ms :: []
+12:23:50 PM [express] GET /api/emergency 304 in 7ms :: []
+12:23:55 PM [express] GET /api/emergency 304 in 8ms :: []
