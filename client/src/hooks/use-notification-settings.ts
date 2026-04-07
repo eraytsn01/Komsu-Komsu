@@ -7,6 +7,8 @@ export type NotificationSettings = {
   emergencies: boolean;
   announcements: boolean;
   sound: NotificationSound;
+  pushEnabled: boolean;
+  pushToken: string | null;
 };
 
 const STORAGE_KEY = "notificationSettings";
@@ -16,6 +18,8 @@ const defaultSettings: NotificationSettings = {
   emergencies: true,
   announcements: true,
   sound: "chime",
+  pushEnabled: false,
+  pushToken: null,
 };
 
 let memoryState: NotificationSettings = defaultSettings;

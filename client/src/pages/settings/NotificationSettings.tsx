@@ -1,11 +1,35 @@
 import { Link } from "wouter";
+import { useState } from "react";
 import { ArrowLeft, Bell, Siren, MessageCircle } from "lucide-react";
 import { MobileContainer } from "@/components/layout/MobileContainer";
 import { useNotificationSettings, type NotificationSound } from "@/hooks/use-notification-settings";
 import { playNotificationSound } from "@/lib/notification-sound";
+import { enableFirebasePushNotifications, isFirebaseMessagingAvailable } from "@/lib/firebase-messaging";
 
 export default function NotificationSettings() {
   const { settings, patchSettings } = useNotificationSettings();
+  const [pushError, setPushError] = useState("");
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
+
+  const handleEnablePush = async () => {
+    setPushError("");
+    setIsEnablingPush(true);
+
+    try {
+      const available = await isFirebaseMessagingAvailable();
+      if (!available) {
+        throw new Error("Firebase yapılandırması veya tarayıcı desteği eksik.");
+      }
+
+      const token = await enableFirebasePushNotifications();
+      patchSettings({ pushEnabled: true, pushToken: token });
+    } catch (error: any) {
+      patchSettings({ pushEnabled: false });
+      setPushError(error?.message || "Firebase push etkinleştirilemedi.");
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
 
   const soundOptions: Array<{ value: NotificationSound; label: string }> = [
     { value: "chime", label: "Chime" },
@@ -83,6 +107,41 @@ export default function NotificationSettings() {
               className="mt-3 w-full px-3 py-2 rounded-xl bg-secondary text-white text-sm font-semibold"
             >
               Örnek Sesi Çal
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+            <div>
+              <h2 className="text-sm font-bold">Firebase Push</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Arka planda bildirim almak için Firebase web push etkinleştirilir.
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2 text-xs">
+              Durum: <span className="font-bold">{settings.pushEnabled ? "Aktif" : "Pasif"}</span>
+            </div>
+
+            {settings.pushToken && (
+              <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
+                <p className="text-[11px] font-semibold text-gray-500 mb-1">Push Token</p>
+                <p className="text-[10px] break-all text-gray-700">{settings.pushToken}</p>
+              </div>
+            )}
+
+            {pushError && (
+              <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600">
+                {pushError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleEnablePush}
+              disabled={isEnablingPush}
+              className="w-full px-3 py-3 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-60"
+            >
+              {isEnablingPush ? "Firebase Push Hazırlanıyor…" : "Firebase Push'ı Etkinleştir"}
             </button>
           </div>
 

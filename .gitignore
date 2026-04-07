@@ -1,4 +1,10 @@
 node_modules
 .env
+.env.*
+!.env.production.example
+client/.env.*
+!client/.env.production.example
+client/public/firebase-messaging-sw.js
+dist/public/firebase-messaging-sw.js
 .DS_Store
 *.zip
