@@ -7,6 +7,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
 import * as turkey from "turkey-neighbourhoods";
+import { sendPushToTokens } from "./firebase-admin";
 
 declare module 'express-session' {
   interface SessionData {
@@ -39,6 +40,32 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ message: "Unauthorized" });
   }
   next();
+}
+
+async function notifyUsersByIds(userIds: number[], payload: { title: string; body: string; data?: Record<string, string> }) {
+  if (userIds.length === 0) return;
+
+  const users = await Promise.all(userIds.map((id) => storage.getUser(id)));
+  const tokens = users
+    .filter((u): u is NonNullable<typeof u> => !!u)
+    .map((u) => u.fcmToken)
+    .filter((token): token is string => !!token);
+
+  await sendPushToTokens(tokens, payload);
+}
+
+async function notifyBuildingUsers(
+  buildingId: number,
+  excludedUserId: number,
+  payload: { title: string; body: string; data?: Record<string, string> },
+) {
+  const users = await storage.getAllUsersInBuilding(buildingId);
+  const tokens = users
+    .filter((u) => u.id !== excludedUserId)
+    .map((u) => u.fcmToken)
+    .filter((token): token is string => !!token);
+
+  await sendPushToTokens(tokens, payload);
 }
 
 type StreetOption = { street: string; type: string };
@@ -453,6 +480,13 @@ export async function registerRoutes(
     const user = await storage.getUser(req.session.userId!);
     if (!user?.isAdmin) return res.status(403).json({ message: "Only admin can create announcements" });
     const announcement = await storage.createAnnouncement({ ...input, userId: user.id, buildingId: user.buildingId! });
+
+    void notifyBuildingUsers(user.buildingId!, user.id, {
+      title: "Yeni duyuru",
+      body: input.title,
+      data: { type: "announcement", id: String(announcement.id), url: "/announcements" },
+    }).catch((err) => console.error("Push notify error (announcement):", err));
+
     res.status(201).json(announcement);
   });
 
@@ -510,6 +544,13 @@ export async function registerRoutes(
     const input = api.messages.create.input.parse(req.body);
     const user = await storage.getUser(req.session.userId!);
     const message = await storage.createMessage({ ...input, senderId: user!.id, buildingId: user!.buildingId! });
+
+    void notifyBuildingUsers(user!.buildingId!, user!.id, {
+      title: "Yeni mesaj",
+      body: `${user?.firstName ?? "Komşunuz"}: ${String(input.content).slice(0, 120)}`,
+      data: { type: "message", id: String(message.id), url: "/chat" },
+    }).catch((err) => console.error("Push notify error (message):", err));
+
     res.status(201).json(message);
   });
 
@@ -553,6 +594,13 @@ export async function registerRoutes(
       buildingId: user!.buildingId!,
       locationCode: user!.locationCode
     });
+
+    void notifyBuildingUsers(user!.buildingId!, user!.id, {
+      title: "🚨 Acil Durum",
+      body: `${user?.firstName ?? "Bir komşu"} acil yardım talebi oluşturdu.`,
+      data: { type: "emergency", id: String(alert.id), url: "/statuses" },
+    }).catch((err) => console.error("Push notify error (emergency):", err));
+
     res.status(201).json({ ...alert, alreadyActive: false });
   });
 
@@ -584,6 +632,14 @@ export async function registerRoutes(
   app.post('/api/private-messages', requireAuth, async (req, res) => {
     const input = api.privateMessages.create.input.parse(req.body);
     const msg = await storage.createPrivateMessage({ ...input, senderId: req.session.userId! });
+
+    const sender = await storage.getUser(req.session.userId!);
+    void notifyUsersByIds([input.receiverId], {
+      title: "Yeni özel mesaj",
+      body: `${sender?.firstName ?? "Komşunuz"}: ${String(input.content ?? "").slice(0, 120)}`,
+      data: { type: "private-message", id: String(msg.id), url: "/chat" },
+    }).catch((err) => console.error("Push notify error (private message):", err));
+
     res.status(201).json(msg);
   });
 
@@ -608,6 +664,13 @@ export async function registerRoutes(
     const user = await storage.updateUser(req.session.userId!, input);
     const { password, ...rest } = user;
     res.json(rest);
+  });
+
+  app.post('/api/users/push-token', requireAuth, async (req, res) => {
+    const input = z.object({ token: z.string().min(10) }).parse(req.body);
+    const user = await storage.updateUser(req.session.userId!, { fcmToken: input.token });
+    const { password, ...rest } = user;
+    res.status(200).json(rest);
   });
 
   app.get('/api/users/search', requireAuth, async (req, res) => {

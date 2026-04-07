@@ -23,6 +23,7 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   latitude: text("latitude"),
   longitude: text("longitude"),
+  fcmToken: text("fcm_token"),
   isAdmin: boolean("is_admin").default(false),
   isApproved: boolean("is_approved").default(false),
   createdAt: timestamp("created_at").defaultNow(),

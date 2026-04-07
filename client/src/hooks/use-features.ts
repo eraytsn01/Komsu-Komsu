@@ -310,6 +310,25 @@ export function useNearbyUsers(lat: number, lon: number) {
   });
 }
 
+export function useSavePushToken() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const res = await fetch(api.users.pushToken.path, {
+        method: api.users.pushToken.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to save push token");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.auth.me.path] });
+    },
+  });
+}
+
 export function useSearchUsers(query: string) {
   return useQuery({
     queryKey: ['/api/users/search', query],

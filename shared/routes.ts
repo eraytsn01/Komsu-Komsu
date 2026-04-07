@@ -270,6 +270,14 @@ export const api = {
       responses: {
         200: userResponseSchema,
       }
+    },
+    pushToken: {
+      method: 'POST' as const,
+      path: '/api/users/push-token' as const,
+      input: z.object({ token: z.string().min(10) }),
+      responses: {
+        200: userResponseSchema,
+      }
     }
   },
   locations: {

@@ -3,11 +3,13 @@ import { useState } from "react";
 import { ArrowLeft, Bell, Siren, MessageCircle } from "lucide-react";
 import { MobileContainer } from "@/components/layout/MobileContainer";
 import { useNotificationSettings, type NotificationSound } from "@/hooks/use-notification-settings";
+import { useSavePushToken } from "@/hooks/use-features";
 import { playNotificationSound } from "@/lib/notification-sound";
 import { enableFirebasePushNotifications, isFirebaseMessagingAvailable } from "@/lib/firebase-messaging";
 
 export default function NotificationSettings() {
   const { settings, patchSettings } = useNotificationSettings();
+  const savePushToken = useSavePushToken();
   const [pushError, setPushError] = useState("");
   const [isEnablingPush, setIsEnablingPush] = useState(false);
 
@@ -22,6 +24,7 @@ export default function NotificationSettings() {
       }
 
       const token = await enableFirebasePushNotifications();
+      await savePushToken.mutateAsync(token);
       patchSettings({ pushEnabled: true, pushToken: token });
     } catch (error: any) {
       patchSettings({ pushEnabled: false });
