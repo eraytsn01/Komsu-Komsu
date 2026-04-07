@@ -7,8 +7,14 @@ import { fileURLToPath } from "url";
 
 const { Pool } = pg;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let __dirname: string;
+if (typeof __dirname === "undefined" || typeof import.meta === "undefined") {
+  // CommonJS fallback or when __dirname is not available
+  __dirname = process.cwd();
+} else {
+  const __filename = fileURLToPath(import.meta.url);
+  __dirname = path.dirname(__filename);
+}
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
