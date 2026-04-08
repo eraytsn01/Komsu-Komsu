@@ -91,7 +91,7 @@ async function buildAll() {
     platform: "node",
     bundle: true,
     format: "cjs",
-    outfile: "dist/index.cjs",
+    outfile: "dist/server.cjs",
     define: {
       "process.env.NODE_ENV": '"production"',
     },
@@ -99,6 +99,23 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+
+  // Keep legacy entrypoint for platforms still running `node dist/index.cjs`
+  // and patch `fileURLToPath(undefined)` crash seen in some Railway runtimes.
+  await writeFile(
+    "dist/index.cjs",
+    [
+      "const url = require('url');",
+      "const originalFileURLToPath = url.fileURLToPath;",
+      "url.fileURLToPath = (value, ...args) => {",
+      "  if (value === undefined || value === null) return process.cwd();",
+      "  return originalFileURLToPath(value, ...args);",
+      "};",
+      "require('./server.cjs');",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
 }
 
 buildAll().catch((err) => {
