@@ -94,6 +94,12 @@ async function buildAll() {
     outfile: "dist/server.cjs",
     define: {
       "process.env.NODE_ENV": '"production"',
+      // When esbuild compiles ESM → CJS, import.meta.url becomes undefined.
+      // This shim replaces every occurrence with the real CJS-compatible file URL.
+      "import.meta.url": "__importMetaUrl",
+    },
+    banner: {
+      js: 'const __importMetaUrl = require("url").pathToFileURL(__filename).href;',
     },
     minify: true,
     external: externals,
