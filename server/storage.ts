@@ -39,14 +39,10 @@ export class FirebaseStorage {
 
   // --- ROUTES.TS İÇİN TÜM GEREKLİ STUBLAR ---
   async getAnnouncementsByBuilding(buildingId: string): Promise<any[]> { return []; }
-  async getAnnouncement(id: string): Promise<any> { return {}; }
   async getAnnouncementInteractionSummary(id: string, userId: string): Promise<any> { return {}; }
   async setAnnouncementRsvp(id: string, userId: string, response: string): Promise<any> { return {}; }
   async setAnnouncementReaction(id: string, userId: string, type: string): Promise<any> { return {}; }
   async getMessagesByBuilding(buildingId: string): Promise<any[]> { return []; }
-  async getMessage(id: string): Promise<any> { return {}; }
-  async createMessage(userId: string, data: any): Promise<any> { return { ...data, id: '1' }; }
-  async deleteMessage(id: string): Promise<void> { }
   async getActiveAds(): Promise<any[]> { return []; }
   async updateUser(userId: string, data: any): Promise<any> { return { ...data, id: userId }; }
   async searchUsers(q: string): Promise<any[]> { return []; }
@@ -58,9 +54,6 @@ export class FirebaseStorage {
   async getActiveEmergencyAlerts(locationCode: string): Promise<any[]> { return []; }
   async getActiveEmergencyAlertByUser(userId: string): Promise<any> { return null; }
   async resolveEmergencyAlert(alertId: string, status: string): Promise<void> { }
-  async createAnnouncement(userId: string, data: any): Promise<any> { return { ...data, id: '1' }; }
-  async updateAnnouncement(id: string, data: any): Promise<any> { return { ...data, id }; }
-  async deleteAnnouncement(id: string): Promise<void> { }
 
   // STUB EKLENEN METOTLAR (routes.ts ile uyumlu olacak şekilde)
   async getAllUsersInBuilding(buildingId: string): Promise<User[]> {
