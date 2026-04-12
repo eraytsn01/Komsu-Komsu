@@ -1,20 +1,46 @@
-import type { Express, Request, Response, NextFunction } from "express";
-import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import express, { Express, Request, Response, NextFunction } from "express";
+import { createServer, Server } from "http";
+import { storage, FirebaseStorage, User } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
-import { pool } from "./db";
 import * as turkey from "turkey-neighbourhoods";
 import { sendPushToTokens } from "./firebase-admin";
+import { addPendingStreet, getPendingStreets, approvePendingStreet, rejectPendingStreet } from "./pendingStreets";
 
-declare module 'express-session' {
+const app: Express = express();
+const httpServer: Server = createServer(app);
+const typedStorage: FirebaseStorage = storage as FirebaseStorage;
+
+declare module "express-session" {
   interface SessionData {
-    userId: number;
+    userId?: string;
   }
 }
 
+
+// Admin: Onay bekleyen sokak/cadde/bulvarlar
+app.get("/api/streets/pending-list", async (req: Request, res: Response) => {
+  const list = await getPendingStreets();
+  res.json(list);
+});
+app.post("/api/streets/pending-approve/:id", async (req: Request, res: Response) => {
+  // ...existing code...
+  const ok = await rejectPendingStreet(req.params.id);
+  res.json({ success: ok });
+});
+// Elle girilen sokak/cadde/bulvar admin onayına düşsün
+app.post("/api/streets/pending", async (req: Request, res: Response) => {
+  const { city, district, neighborhood, street, type } = req.body;
+  if (!city || !district || !neighborhood || !street || !type) {
+    return res.status(400).json({ message: "Eksik bilgi" });
+  }
+  const id = await addPendingStreet(city, district, neighborhood, street, type);
+  res.json({ success: true, id });
+});
+
+  // ...existing code...
+// ...existing code...
 function getUserIdFromHeader(req: Request) {
   const rawUserId = req.header("x-user-id");
   if (!rawUserId) return undefined;
@@ -32,7 +58,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     const headerUserId = getUserIdFromHeader(req);
     if (headerUserId) {
-      req.session.userId = headerUserId;
+      req.session.userId = String(headerUserId);
     }
   }
 
@@ -42,30 +68,34 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-async function notifyUsersByIds(userIds: number[], payload: { title: string; body: string; data?: Record<string, string> }) {
+async function notifyUsersByIds(userIds: string[], payload: { title: string; body: string; data?: Record<string, string> }) {
   if (userIds.length === 0) return;
-
-  const users = await Promise.all(userIds.map((id) => storage.getUser(id)));
+  const users = await Promise.all(userIds.map((id) => typedStorage.getUser(id)));
   const tokens = users
-    .filter((u): u is NonNullable<typeof u> => !!u)
-    .map((u) => u.fcmToken)
+    .filter((u): u is User => !!u)
+    .map((u: User) => u.fcmToken)
     .filter((token): token is string => !!token);
-
   await sendPushToTokens(tokens, payload);
 }
 
 async function notifyBuildingUsers(
-  buildingId: number,
-  excludedUserId: number,
+  buildingId: string,
+  excludedUserId: string,
   payload: { title: string; body: string; data?: Record<string, string> },
 ) {
-  const users = await storage.getAllUsersInBuilding(buildingId);
+  const users = await typedStorage.getAllUsersInBuilding(buildingId);
   const tokens = users
-    .filter((u) => u.id !== excludedUserId)
-    .map((u) => u.fcmToken)
-    .filter((token): token is string => !!token);
-
+    .filter((u: User) => u.id !== excludedUserId)
+    .map((u: User) => u.fcmToken)
+    .filter((token: string | undefined): token is string => !!token);
   await sendPushToTokens(tokens, payload);
+}
+// Eksik storage fonksiyonları için stub ekle
+if (!('getAllUsersInBuilding' in storage)) {
+  (storage as any).getAllUsersInBuilding = async (buildingId: string) => [];
+}
+if (!('getStreets' in storage)) {
+  (storage as any).getStreets = async (city: string, district: string, neighborhood: string) => [];
 }
 
 type StreetOption = { street: string; type: string };
@@ -194,7 +224,7 @@ async function fetchStreetsFromOsm(city: string, district: string, neighborhood:
 }
 
 async function resolveStreets(city: string, district: string, neighborhood: string): Promise<StreetOption[]> {
-  const dbStreets = await storage.getStreets(city, district, neighborhood);
+  const dbStreets = await typedStorage.getStreets(city, district, neighborhood);
   if (dbStreets.length > 0) return dbStreets;
 
   const key = `${city}|${district}|${neighborhood}`;
@@ -204,26 +234,27 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
 
   try {
     const streets = await fetchStreetsFromOsm(city, district, neighborhood);
-    streetsCache.set(key, streets);
-    return streets;
-  } catch {
-    streetsCache.set(key, []);
+    if (streets.length > 0) {
+      streetsCache.set(key, streets);
+      return streets;
+    }
+    // OSM'den sonuç gelmezse turkey-neighbourhoods ile fallback (pakette doğrudan sokak listesi yok)
+    // En azından mahalle adını sokak olarak ekle
+    if (neighborhood) {
+      const mapped = [{ street: neighborhood, type: "street" }];
+      streetsCache.set(key, mapped);
+      return mapped;
+    }
+    return [];
+  } catch (err) {
+    console.error("OSM Fetch Error:", err);
+    // OSM ve turkey-neighbourhoods başarısızsa boş dizi dön
     return [];
   }
 }
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-
-  const PgSession = connectPgSimple(session);
-
+  // Sadece bellek içi session kullanılacak (veya Firebase tabanlı session yönetimi eklenebilir)
   app.use(session({
-    store: new PgSession({
-      pool,
-      createTableIfMissing: true,
-    }),
     secret: process.env.SESSION_SECRET || 'komsum-secret',
     resave: false,
     saveUninitialized: false,
@@ -233,7 +264,7 @@ export async function registerRoutes(
   }));
 
   // Auth routes
-  app.post(api.auth.register.path, async (req, res) => {
+  app.post(api.auth.register.path, async (req: Request, res: Response) => {
     try {
       const input = api.auth.register.input.parse(req.body);
       
@@ -241,13 +272,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Passwords do not match" });
       }
 
-      const existingUser = await storage.getUserByEmail(input.email);
+      const existingUser = await typedStorage.getUserByEmail(input.email);
       if (existingUser) {
         return res.status(400).json({ message: "Email already exists" });
       }
 
       const streets = await resolveStreets(input.city, input.district, input.neighborhood);
       // Sokak verisi eksik olabileceği için listede olmayan manuel girişlere izin veriyoruz.
+
 
       const locationCode = [
         input.city,
@@ -256,18 +288,19 @@ export async function registerRoutes(
         input.streetType,
         input.street,
         input.doorNo.trim(),
+        input.innerDoorNo.trim(),
       ].join("|");
 
-      const addressDetails = `${input.city} / ${input.district} / ${input.neighborhood} / ${input.streetType} ${input.street} No:${input.doorNo.trim()}`;
+      const addressDetails = `${input.city} / ${input.district} / ${input.neighborhood} / ${input.streetType} ${input.street} No:${input.doorNo.trim()} İç Kapı:${input.innerDoorNo.trim()}`;
 
       // Check if building exists
-      let building = await storage.getBuildingByLocationCode(locationCode);
+      let building = await typedStorage.getBuildingByLocationCode(locationCode);
       let isAdmin = false;
       let isApproved = false;
 
       if (!building) {
         // First user creates the building and becomes admin
-        building = await storage.createBuilding({
+        building = await typedStorage.createBuilding({
           locationCode,
           addressDetails,
         });
@@ -275,7 +308,8 @@ export async function registerRoutes(
         isApproved = true; // Admin is auto-approved
       }
 
-      const user = await storage.createUser({
+      // id olarak email kullanılıyor
+      const user = await typedStorage.createUser(input.email, {
         firstName: input.firstName,
         lastName: input.lastName,
         email: input.email,
@@ -283,13 +317,15 @@ export async function registerRoutes(
         password: input.password, // In MVP we store as plain. In prod use bcrypt!
         locationCode,
         buildingId: building.id,
-        avatarUrl: input.avatarUrl || null,
+        avatarUrl: input.avatarUrl || undefined,
         isAdmin,
-        isApproved
+        isApproved,
+        doorNo: input.doorNo,
+        innerDoorNo: input.innerDoorNo,
       });
 
       if (isAdmin && !building.adminId) {
-        await storage.updateBuildingAdmin(building.id, user.id);
+        await typedStorage.updateBuildingAdmin(building.id, user.id);
       }
 
       if (isApproved) {
@@ -310,10 +346,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.auth.login.path, async (req, res) => {
+  app.post(api.auth.login.path, async (req: Request, res: Response) => {
     try {
       const input = api.auth.login.input.parse(req.body);
-      const user = await storage.getUserByEmail(input.email);
+      const user = await typedStorage.getUserByEmail(input.email);
 
       if (!user || user.password !== input.password) {
         return res.status(401).json({ message: "Invalid credentials" });
@@ -335,14 +371,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.auth.logout.path, (req, res) => {
+  app.post(api.auth.logout.path, (req: Request, res: Response) => {
     req.session.destroy(() => {
       res.status(200).json({ message: "Logged out" });
     });
   });
 
-  app.get(api.auth.me.path, requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+  app.get(api.auth.me.path, requireAuth, async (req: Request, res: Response) => {
+    const user = await typedStorage.getUser(req.session.userId!);
     if (!user) return res.status(401).json({ message: "User not found" });
     
     const { password, ...userWithoutPassword } = user;
@@ -350,122 +386,123 @@ export async function registerRoutes(
   });
 
   // Admin routes
-  app.get(api.admin.pendingUsers.path, requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+  app.get(api.admin.pendingUsers.path, requireAuth, async (req: Request, res: Response) => {
+    const user = await typedStorage.getUser(req.session.userId!);
     if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
 
-    const pending = await storage.getPendingUsersForBuilding(user.buildingId!);
-    res.status(200).json(pending.map(u => {
+    const pending = await typedStorage.getPendingUsersForBuilding(user.buildingId!);
+    res.status(200).json(pending.map((u: any) => {
       const { password, ...rest } = u;
       return rest;
     }));
   });
 
-  app.post(api.admin.approveUser.path, requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
+  app.post(api.admin.approveUser.path, requireAuth, async (req: Request, res: Response) => {
+    const user = await typedStorage.getUser(req.session.userId!);
     if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
 
     const targetUserId = parseInt(getSingleParam(req.params.id), 10);
-    await storage.approveUser(targetUserId);
+    await typedStorage.approveUser(String(targetUserId));
     res.status(200).json({ message: "User approved" });
   });
 
   // App features
-  app.get(api.statuses.list.path, requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
-    const statuses = await storage.getStatuses();
+  app.get(api.statuses.list.path, requireAuth, async (req: Request, res: Response) => {
+    const user = await typedStorage.getUser(req.session.userId!);
+    const statuses = await typedStorage.getStatuses();
     // In a real app we'd filter by radius or building. For MVP, we can return all or filter by building
-    const buildingStatuses = statuses.filter(s => s.user.buildingId === user?.buildingId);
+    const buildingStatuses = statuses.filter((s: any) => s.user.buildingId === user?.buildingId);
     res.status(200).json(buildingStatuses);
   });
 
-  app.post(api.statuses.create.path, requireAuth, async (req, res) => {
+  app.post(api.statuses.create.path, requireAuth, async (req: Request, res: Response) => {
     const input = api.statuses.create.input.parse(req.body);
-    const status = await storage.createStatus({ ...input, userId: req.session.userId! });
+    const status = await typedStorage.createStatus(req.session.userId!, { ...input, userId: req.session.userId! });
     res.status(201).json(status);
   });
 
-  app.post(api.statuses.view.path, requireAuth, async (req, res) => {
+  app.post(api.statuses.view.path, requireAuth, async (req: Request, res: Response) => {
     const statusId = parseInt(getSingleParam(req.params.id), 10);
-    await storage.recordStatusView(statusId, req.session.userId!);
+    await typedStorage.recordStatusView(String(statusId), String(req.session.userId!));
     res.status(200).json({ success: true });
   });
 
-  app.get(api.statuses.viewers.path, requireAuth, async (req, res) => {
+  app.get(api.statuses.viewers.path, requireAuth, async (req: Request, res: Response) => {
     const statusId = parseInt(getSingleParam(req.params.id), 10);
-    const viewers = await storage.getStatusViewers(statusId);
+    const viewers = await typedStorage.getStatusViewers(String(statusId));
     res.status(200).json(viewers);
   });
 
-  app.get(api.adverts.list.path, requireAuth, async (req, res) => {
-    const user = await storage.getUser(req.session.userId!);
-    const adverts = await storage.getAdvertsByBuilding(
-      user!.buildingId!,
-      user?.latitude ? parseFloat(user.latitude) : null,
-      user?.longitude ? parseFloat(user.longitude) : null,
+  app.get(api.adverts.list.path, requireAuth, async (req: Request, res: Response) => {
+    const user = await typedStorage.getUser(req.session.userId!);
+    const adverts = await typedStorage.getAdvertsByBuilding(
+      user?.buildingId!,
+      user?.latitude,
+      user?.longitude,
     );
     res.status(200).json(adverts);
   });
 
-  app.post(api.adverts.create.path, requireAuth, async (req, res) => {
+  app.post(api.adverts.create.path, requireAuth, async (req: Request, res: Response) => {
     const input = api.adverts.create.input.parse(req.body);
-    const user = await storage.getUser(req.session.userId!);
-    const advert = await storage.createAdvert({ ...input, userId: user!.id, buildingId: user!.buildingId! });
+    const user = await typedStorage.getUser(req.session.userId!);
+    const advert = await typedStorage.createAdvert(user!.id, { ...input, userId: user!.id, buildingId: user!.buildingId! });
     res.status(201).json(advert);
   });
 
-  app.get('/api/adverts/close-stats', requireAuth, async (req, res) => {
+  app.get('/api/adverts/close-stats', requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
-    const stats = await storage.getAdvertCloseStats(user!.buildingId!);
+    const stats = await typedStorage.getAdvertCloseStats(user!.buildingId!);
     res.status(200).json(stats);
   });
 
-  app.post('/api/adverts/:id/close', requireAuth, async (req, res) => {
+  app.post('/api/adverts/:id/close', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const input = z.object({ reason: z.enum(["sold", "rented", "withdrawn"]) }).parse(req.body);
     const user = await storage.getUser(req.session.userId!);
-    const advert = await storage.getAdvert(id);
+    const advert = await typedStorage.getAdvert(String(id));
 
     if (!advert) return res.status(404).json({ message: "Not found" });
     if (advert.userId !== user!.id) return res.status(403).json({ message: "Forbidden" });
 
-    const closed = await storage.closeAdvert(id, input.reason);
+    const closed = await typedStorage.closeAdvert(String(id), input.reason);
     res.status(200).json(closed);
   });
 
-  app.patch('/api/adverts/:id', requireAuth, async (req, res) => {
+  app.patch('/api/adverts/:id', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
-    const advert = await storage.getAdvert(id);
+    const advert = await typedStorage.getAdvert(String(id));
     if (!advert) return res.status(404).json({ message: "Not found" });
     if (advert.userId !== user!.id && !user!.isAdmin) return res.status(403).json({ message: "Forbidden" });
-    const updated = await storage.updateAdvert(id, req.body);
+    const updated = await typedStorage.updateAdvert(String(id), req.body);
     res.json(updated);
   });
 
-  app.delete('/api/adverts/:id', requireAuth, async (req, res) => {
+  app.delete('/api/adverts/:id', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
-    const advert = await storage.getAdvert(id);
+    const advert = await typedStorage.getAdvert(String(id));
     if (!advert) return res.status(404).json({ message: "Not found" });
     if (advert.userId !== user!.id && !user!.isAdmin) return res.status(403).json({ message: "Forbidden" });
-    await storage.deleteAdvert(id);
+    await typedStorage.deleteAdvert(String(id));
     res.json({ message: "Deleted" });
   });
 
-  app.delete('/api/statuses/:id', requireAuth, async (req, res) => {
+  app.delete('/api/statuses/:id', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
-    const [status] = await (await storage.getStatuses()).filter(s => s.id === id);
+    const statusesList = await typedStorage.getStatuses();
+    const status = statusesList.find((s: any) => s.id === id);
     if (!status) return res.status(404).json({ message: "Not found" });
     if (status.userId !== user!.id && !user!.isAdmin) return res.status(403).json({ message: "Forbidden" });
-    await storage.deleteStatus(id);
+    await typedStorage.deleteStatus(String(id));
     res.json({ message: "Deleted" });
   });
 
   app.get(api.announcements.list.path, requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    const items = await storage.getAnnouncementsByBuilding(user!.buildingId!);
+    const items = await typedStorage.getAnnouncementsByBuilding(user!.buildingId!);
     const withInteractions = await Promise.all(
       items.map(async (item) => ({
         ...item,
@@ -479,7 +516,7 @@ export async function registerRoutes(
     const input = api.announcements.create.input.parse(req.body);
     const user = await storage.getUser(req.session.userId!);
     if (!user?.isAdmin) return res.status(403).json({ message: "Only admin can create announcements" });
-    const announcement = await storage.createAnnouncement({ ...input, userId: user.id, buildingId: user.buildingId! });
+    const announcement = await typedStorage.createAnnouncement(user.id, { ...input, userId: user.id, buildingId: user.buildingId! });
 
     void notifyBuildingUsers(user.buildingId!, user.id, {
       title: "Yeni duyuru",
@@ -493,20 +530,20 @@ export async function registerRoutes(
   app.patch('/api/announcements/:id', requireAuth, async (req, res) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
-    const ann = await storage.getAnnouncement(id);
+    const ann = await typedStorage.getAnnouncement(String(id));
     if (!ann) return res.status(404).json({ message: "Not found" });
     if (ann.userId !== user!.id && !user!.isAdmin) return res.status(403).json({ message: "Forbidden" });
-    const updated = await storage.updateAnnouncement(id, req.body);
+    const updated = await typedStorage.updateAnnouncement(String(id), req.body);
     res.json(updated);
   });
 
   app.delete('/api/announcements/:id', requireAuth, async (req, res) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
-    const ann = await storage.getAnnouncement(id);
+    const ann = await storage.getAnnouncement(String(id));
     if (!ann) return res.status(404).json({ message: "Not found" });
     if (ann.userId !== user!.id && !user!.isAdmin) return res.status(403).json({ message: "Forbidden" });
-    await storage.deleteAnnouncement(id);
+    await typedStorage.deleteAnnouncement(String(id));
     res.json({ message: "Deleted" });
   });
 
@@ -514,11 +551,11 @@ export async function registerRoutes(
     const id = parseInt(getSingleParam(req.params.id), 10);
     const input = z.object({ response: z.enum(["attending", "not_attending"]) }).parse(req.body);
     const user = await storage.getUser(req.session.userId!);
-    const ann = await storage.getAnnouncement(id);
+    const ann = await typedStorage.getAnnouncement(String(id));
     if (!ann) return res.status(404).json({ message: "Not found" });
     if (ann.buildingId !== user!.buildingId) return res.status(403).json({ message: "Forbidden" });
 
-    const summary = await storage.setAnnouncementRsvp(id, user!.id, input.response);
+    const summary = await typedStorage.setAnnouncementRsvp(String(id), user!.id, input.response);
     res.status(200).json(summary);
   });
 
@@ -526,24 +563,24 @@ export async function registerRoutes(
     const id = parseInt(getSingleParam(req.params.id), 10);
     const input = z.object({ type: z.enum(["like", "dislike"]) }).parse(req.body);
     const user = await storage.getUser(req.session.userId!);
-    const ann = await storage.getAnnouncement(id);
+    const ann = await storage.getAnnouncement(String(id));
     if (!ann) return res.status(404).json({ message: "Not found" });
     if (ann.buildingId !== user!.buildingId) return res.status(403).json({ message: "Forbidden" });
 
-    const summary = await storage.setAnnouncementReaction(id, user!.id, input.type);
+    const summary = await typedStorage.setAnnouncementReaction(String(id), user!.id, input.type);
     res.status(200).json(summary);
   });
 
   app.get(api.messages.list.path, requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    const messages = await storage.getMessagesByBuilding(user!.buildingId!);
+    const messages = await typedStorage.getMessagesByBuilding(user!.buildingId!);
     res.status(200).json(messages);
   });
 
   app.post(api.messages.create.path, requireAuth, async (req, res) => {
     const input = api.messages.create.input.parse(req.body);
     const user = await storage.getUser(req.session.userId!);
-    const message = await storage.createMessage({ ...input, senderId: user!.id, buildingId: user!.buildingId! });
+    const message = await typedStorage.createMessage(user!.id, { ...input, senderId: user!.id, buildingId: user!.buildingId! });
 
     void notifyBuildingUsers(user!.buildingId!, user!.id, {
       title: "Yeni mesaj",
@@ -557,30 +594,30 @@ export async function registerRoutes(
   app.delete('/api/messages/:id', requireAuth, async (req, res) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
-    const msg = await storage.getMessage(id);
+    const msg = await typedStorage.getMessage(String(id));
     if (!msg) return res.status(404).json({ message: "Not found" });
     if (msg.senderId !== user!.id && !user!.isAdmin) return res.status(403).json({ message: "Forbidden" });
-    await storage.deleteMessage(id);
+    await typedStorage.deleteMessage(String(id));
     res.json({ message: "Deleted" });
   });
 
   app.delete('/api/private-messages/:id', requireAuth, async (req, res) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
-    await storage.deletePrivateMessage(id);
+    await typedStorage.deletePrivateMessage(String(id));
     res.json({ message: "Deleted" });
   });
 
   // Emergency routes
   app.get(api.emergency.list.path, requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    const alerts = await storage.getActiveEmergencyAlerts(user!.locationCode);
+    const alerts = await typedStorage.getActiveEmergencyAlerts(user!.locationCode!);
     res.status(200).json(alerts);
   });
 
   app.post(api.emergency.create.path, requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
 
-    const existing = await storage.getActiveEmergencyAlertByUser(user!.id);
+    const existing = await typedStorage.getActiveEmergencyAlertByUser(user!.id);
     if (existing) {
       return res.status(200).json({
         ...existing,
@@ -589,7 +626,7 @@ export async function registerRoutes(
       });
     }
 
-    const alert = await storage.createEmergencyAlert({
+    const alert = await typedStorage.createEmergencyAlert(user!.id, {
       userId: user!.id,
       buildingId: user!.buildingId!,
       locationCode: user!.locationCode
@@ -610,13 +647,13 @@ export async function registerRoutes(
 
     const input = api.emergency.resolve.input.parse(req.body);
     const alertId = parseInt(getSingleParam(req.params.id), 10);
-    await storage.resolveEmergencyAlert(alertId, input.status);
+    await typedStorage.resolveEmergencyAlert(String(alertId), input.status);
     res.status(200).json({ message: "Alert resolved" });
   });
 
   // Private messages
   app.get('/api/conversations', requireAuth, async (req, res) => {
-    const convs = await storage.getConversations(req.session.userId!);
+    const convs = await typedStorage.getConversations(req.session.userId!);
     res.json(convs.map(u => {
       const { password, ...rest } = u;
       return rest;
@@ -625,13 +662,13 @@ export async function registerRoutes(
 
   app.get('/api/private-messages/:otherUserId', requireAuth, async (req, res) => {
     const otherId = parseInt(getSingleParam(req.params.otherUserId), 10);
-    const msgs = await storage.getPrivateMessages(req.session.userId!, otherId);
+    const msgs = await typedStorage.getPrivateMessages(req.session.userId!, otherId);
     res.json(msgs);
   });
 
   app.post('/api/private-messages', requireAuth, async (req, res) => {
     const input = api.privateMessages.create.input.parse(req.body);
-    const msg = await storage.createPrivateMessage({ ...input, senderId: req.session.userId! });
+    const msg = await typedStorage.createPrivateMessage(req.session.userId!, { ...input, senderId: req.session.userId! });
 
     const sender = await storage.getUser(req.session.userId!);
     void notifyUsersByIds([input.receiverId], {
@@ -645,14 +682,14 @@ export async function registerRoutes(
 
   // Ads
   app.get('/api/ads', requireAuth, async (req, res) => {
-    const ads = await storage.getActiveAds();
+    const ads = await typedStorage.getActiveAds();
     res.json(ads);
   });
 
   // Users
   app.get('/api/users', requireAuth, async (req, res) => {
     const user = await storage.getUser(req.session.userId!);
-    const users = await storage.getAllUsersInBuilding(user!.buildingId!);
+    const users = await typedStorage.getAllUsersInBuilding(user!.buildingId!);
     res.json(users.map(u => {
       const { password, ...rest } = u;
       return rest;
@@ -661,44 +698,44 @@ export async function registerRoutes(
 
   app.patch('/api/users/me', requireAuth, async (req, res) => {
     const input = api.users.update.input.parse(req.body);
-    const user = await storage.updateUser(req.session.userId!, input);
-    const { password, ...rest } = user;
+    const updatedUser = await typedStorage.updateUser(req.session.userId!, input);
+    const { password, ...rest } = updatedUser || {};
     res.json(rest);
   });
 
   app.post('/api/users/push-token', requireAuth, async (req, res) => {
     const input = z.object({ token: z.string().min(10) }).parse(req.body);
-    const user = await storage.updateUser(req.session.userId!, { fcmToken: input.token });
-    const { password, ...rest } = user;
+    const updatedUser = await typedStorage.updateUser(req.session.userId!, { fcmToken: input.token });
+    const { password, ...rest } = updatedUser || {};
     res.status(200).json(rest);
   });
 
   app.get('/api/users/search', requireAuth, async (req, res) => {
     const q = req.query.q as string;
-    const results = await storage.searchUsers(q);
+    const results = await typedStorage.searchUsers(q);
     res.json(results.map(({ password, ...u }) => u));
   });
 
   app.get('/api/users/nearby', requireAuth, async (req, res) => {
     const lat = parseFloat(req.query.lat as string);
     const lon = parseFloat(req.query.lon as string);
-    const results = await storage.getNearbyUsers(lat, lon, 0.5); // 500m
+    const results = await typedStorage.getNearbyUsers(lat, lon, 0.5); // 500m
     res.json(results.map(({ password, ...u }) => u));
   });
 
   app.post('/api/users/:id/block', requireAuth, async (req, res) => {
-    await storage.blockUser(req.session.userId!, parseInt(getSingleParam(req.params.id), 10));
+    await typedStorage.blockUser(req.session.userId!, parseInt(getSingleParam(req.params.id), 10));
     res.json({ success: true });
   });
 
   app.post('/api/users/:id/report', requireAuth, async (req, res) => {
-    await storage.reportUser(req.session.userId!, parseInt(getSingleParam(req.params.id), 10), req.body.reason);
+    await typedStorage.reportUser(req.session.userId!, parseInt(getSingleParam(req.params.id), 10), req.body.reason);
     res.json({ success: true });
   });
 
   // Locations
   app.get('/api/locations/cities', async (req, res) => {
-    const dbCities = await storage.getCities();
+    const dbCities = await typedStorage.getCities();
     const cities = dbCities.length > 0 ? dbCities : turkey.getCities().map((c) => c.name);
     res.json(cities);
   });
@@ -706,7 +743,7 @@ export async function registerRoutes(
   app.get('/api/locations/districts', async (req, res) => {
     const city = req.query.city as string;
     if (!city) return res.status(400).json({ message: "City required" });
-    const dbDistricts = await storage.getDistricts(city);
+    const dbDistricts = await typedStorage.getDistricts(city);
     let districts = dbDistricts;
     if (districts.length === 0) {
       const cityCode = getCityCode(city);
@@ -719,7 +756,7 @@ export async function registerRoutes(
     const city = req.query.city as string;
     const district = req.query.district as string;
     if (!city || !district) return res.status(400).json({ message: "City and district required" });
-    const dbNeighborhoods = await storage.getNeighborhoods(city, district);
+    const dbNeighborhoods = await typedStorage.getNeighborhoods(city, district);
     let neighborhoods = dbNeighborhoods;
     if (neighborhoods.length === 0) {
       const cityCode = getCityCode(city);
@@ -748,6 +785,3 @@ export async function registerRoutes(
     const streets = await resolveStreets(city, district, neighborhood);
     res.json(streets);
   });
-
-  return httpServer;
-}

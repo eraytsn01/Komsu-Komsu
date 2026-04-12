@@ -1,4 +1,5 @@
 import { useState } from "react";
+import PhoneVerify from "./PhoneVerify";
 import { useEffect } from "react";
 import { useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -39,7 +40,7 @@ export default function Register() {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    phone: "",
+    phone: "+90 ", // Otomatik +90 ile başlasın
     email: "",
     password: "",
     passwordConfirm: "",
@@ -50,6 +51,7 @@ export default function Register() {
     street: "",
     streetType: "street",
     doorNo: "",
+    innerDoorNo: "",
   });
 
   const [cities, setCities] = useState<string[]>([]);
@@ -58,6 +60,7 @@ export default function Register() {
   const [streets, setStreets] = useState<StreetOption[]>([]);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
   const [manualStreet, setManualStreet] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
 
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -67,8 +70,51 @@ export default function Register() {
   const { toast } = useToast();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (e.target.name === "phone") {
+      let value = e.target.value;
+      // Sadece +90 ile başlasın ve 10 hane girilebilsin, otomatik boşluk ekle
+      if (!value.startsWith("+90 ")) value = "+90 ";
+      value = value.replace(/[^0-9]/g, "");
+      value = value.slice(0, 12); // +90 dahil 12 karakter
+      // +90 5XX XXX XX XX formatına otomatik boşluk ekle
+      let formatted = "+90 ";
+      if (value.length > 2) formatted += value.slice(2, 5);
+      if (value.length > 5) formatted += " " + value.slice(5, 8);
+      if (value.length > 8) formatted += " " + value.slice(8, 10);
+      if (value.length > 10) formatted += " " + value.slice(10, 12);
+      setFormData({ ...formData, phone: formatted.trimEnd() });
+    } else if (e.target.name === "innerDoorNo") {
+      // Sadece sayı girilsin
+      let value = e.target.value.replace(/\D/g, "");
+      setFormData({ ...formData, innerDoorNo: value });
+    } else if (e.target.name === "firstName") {
+      // İlk harfi büyük, diğerleri küçük olacak şekilde otomatik düzelt
+      let value = e.target.value;
+      if (value.length > 0) {
+        value = value.charAt(0).toLocaleUpperCase("tr-TR") + value.slice(1).toLocaleLowerCase("tr-TR");
+      }
+      setFormData({ ...formData, firstName: value });
+    } else if (e.target.name === "lastName") {
+      // Sadece büyük harf girilebilsin
+      let value = e.target.value.replace(/[^A-ZÇĞİÖŞÜ\s]/gi, "").toLocaleUpperCase("tr-TR");
+      setFormData({ ...formData, lastName: value });
+    } else {
+      setFormData({ ...formData, [e.target.name]: e.target.value });
+    }
   };
+
+  // Telefon inputuna odaklanınca otomatik +90 ekle
+  const handlePhoneFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (!formData.phone.startsWith("+90 ")) {
+      setFormData((prev) => ({ ...prev, phone: "+90 " }));
+    }
+  };
+  // Apartman olmayan yerler için iç kapı no otomatik 0
+  useEffect(() => {
+    if (formData.neighborhood && /köy|ev/i.test(formData.neighborhood)) {
+      setFormData((prev) => ({ ...prev, innerDoorNo: "0" }));
+    }
+  }, [formData.neighborhood]);
 
   const handleImagePicked = (file?: File) => {
     if (!file) return;
@@ -80,10 +126,11 @@ export default function Register() {
     reader.readAsDataURL(file);
   };
 
+  const apiBase = import.meta.env.VITE_API_BASE_URL || "";
   useEffect(() => {
     const loadCities = async () => {
       try {
-        const res = await fetch("/api/locations/cities");
+        const res = await fetch(`${apiBase}/api/locations/cities`);
         if (!res.ok) throw new Error("Şehirler alınamadı");
         const data = await res.json();
         setCities(data?.length ? data : TURKEY_CITIES);
@@ -93,7 +140,7 @@ export default function Register() {
       }
     };
     loadCities();
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     if (!formData.city) return;
@@ -104,15 +151,15 @@ export default function Register() {
     setStreets([]);
     setFormData((prev) => ({ ...prev, district: "", neighborhood: "", street: "", streetType: "street" }));
 
-    fetch(`/api/locations/districts?city=${encodeURIComponent(formData.city)}`)
+    fetch(`${apiBase}/api/locations/districts?city=${encodeURIComponent(formData.city)}`)
       .then((res) => {
         if (!res.ok) throw new Error("İlçeler alınamadı");
         return res.json();
       })
-        .then((data) => setDistricts(data?.length ? data : FALLBACK_DISTRICTS))
+      .then((data) => setDistricts(data?.length ? data : FALLBACK_DISTRICTS))
       .catch((err) => console.error(err))
       .finally(() => setIsLocationLoading(false));
-  }, [formData.city]);
+  }, [formData.city, apiBase]);
 
   useEffect(() => {
     if (!formData.city || !formData.district) return;
@@ -122,7 +169,7 @@ export default function Register() {
     setStreets([]);
     setFormData((prev) => ({ ...prev, neighborhood: "", street: "", streetType: "street" }));
 
-    fetch(`/api/locations/neighborhoods?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}`)
+    fetch(`${apiBase}/api/locations/neighborhoods?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}`)
       .then((res) => {
         if (!res.ok) throw new Error("Mahalleler alınamadı");
         return res.json();
@@ -133,7 +180,7 @@ export default function Register() {
       })
       .catch((err) => console.error(err))
       .finally(() => setIsLocationLoading(false));
-  }, [formData.city, formData.district]);
+  }, [formData.city, formData.district, apiBase]);
 
   useEffect(() => {
     if (!formData.city || !formData.district || !formData.neighborhood) return;
@@ -142,18 +189,26 @@ export default function Register() {
     setStreets([]);
     setFormData((prev) => ({ ...prev, street: "", streetType: "street" }));
 
-    fetch(`/api/locations/streets?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}&neighborhood=${encodeURIComponent(formData.neighborhood)}`)
+    fetch(`${apiBase}/api/locations/streets?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}&neighborhood=${encodeURIComponent(formData.neighborhood)}`)
       .then((res) => {
         if (!res.ok) throw new Error("Sokak/Cadde/Bulvarlar alınamadı");
         return res.json();
       })
-        .then((data) => setStreets(data?.length ? data : FALLBACK_STREETS))
+      .then((data) => setStreets(data?.length ? data : FALLBACK_STREETS))
       .catch((err) => console.error(err))
       .finally(() => setIsLocationLoading(false));
-  }, [formData.city, formData.district, formData.neighborhood]);
+  }, [formData.city, formData.district, formData.neighborhood, apiBase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!phoneVerified) {
+      toast({
+        title: "Telefon Doğrulama",
+        description: "Telefon numaranızı doğrulamanız gerekmektedir.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (formData.password !== formData.passwordConfirm) {
       return toast({
         title: "Hata",
@@ -161,7 +216,6 @@ export default function Register() {
         variant: "destructive",
       });
     }
-
     if (!formData.avatarUrl) {
       return toast({
         title: "Hata",
@@ -169,7 +223,6 @@ export default function Register() {
         variant: "destructive",
       });
     }
-
     if (manualStreet && !formData.street.trim()) {
       return toast({
         title: "Hata",
@@ -177,8 +230,20 @@ export default function Register() {
         variant: "destructive",
       });
     }
-    
     try {
+      if (manualStreet && formData.street.trim()) {
+        await fetch((import.meta.env.VITE_API_BASE_URL || "") + "/api/streets/pending", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            city: formData.city,
+            district: formData.district,
+            neighborhood: formData.neighborhood,
+            street: formData.street,
+            type: formData.streetType,
+          }),
+        });
+      }
       const result = await register(formData);
       toast({
         title: "Başarılı",
@@ -206,21 +271,36 @@ export default function Register() {
         <h1 className="text-3xl font-bold text-foreground mb-2">Kayıt Ol</h1>
         <p className="text-muted-foreground mb-8">Komşularına katılmak için bilgilerini doldur.</p>
 
+        {!phoneVerified && (
+          <PhoneVerify phone={formData.phone} onVerified={() => setPhoneVerified(true)} />
+        )}
         <form onSubmit={handleSubmit} className="space-y-4 pb-12">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-500 uppercase ml-1">Ad</label>
-              <input name="firstName" value={formData.firstName} onChange={handleChange} required className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              <input name="firstName" value={formData.firstName} onChange={handleChange} required className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" autoCapitalize="words" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-500 uppercase ml-1">Soyad</label>
-              <input name="lastName" value={formData.lastName} onChange={handleChange} required className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              <input name="lastName" value={formData.lastName} onChange={handleChange} required className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" style={{ textTransform: 'uppercase' }} />
             </div>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-gray-500 uppercase ml-1">Telefon (+90...)</label>
-            <input name="phone" value={formData.phone} onChange={handleChange} required placeholder="+90" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
+            <input
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              onFocus={handlePhoneFocus}
+              required
+              placeholder="+90 5XX XXX XX XX"
+              maxLength={17}
+              pattern="\+90 5[0-9]{2} [0-9]{3} [0-9]{2} [0-9]{2}"
+              inputMode="numeric"
+              type="tel"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -392,6 +472,17 @@ export default function Register() {
               onChange={handleChange}
               required
               placeholder="Örn: 12A"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 uppercase ml-1">İç Kapı Numarası</label>
+            <input
+              name="innerDoorNo"
+              value={formData.innerDoorNo}
+              onChange={handleChange}
+              required
+              placeholder="Apartman değilse 0 yazılır"
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>

@@ -1,5 +1,6 @@
 import { getApps, initializeApp, cert } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
+import { getDatabase } from "firebase-admin/database";
 
 function getPrivateKey() {
   const raw = process.env.FIREBASE_PRIVATE_KEY;
@@ -17,19 +18,21 @@ function isFirebaseAdminConfigured() {
 
 function getFirebaseAdminApp() {
   if (!isFirebaseAdminConfigured()) return null;
-
   if (getApps().length > 0) {
     return getApps()[0];
   }
-
   return initializeApp({
     credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       privateKey: getPrivateKey(),
     }),
+    databaseURL: process.env.DATABASE_URL,
   });
 }
+
+export const firebaseAdminApp = getFirebaseAdminApp();
+export const db = firebaseAdminApp ? getDatabase(firebaseAdminApp) : undefined;
 
 export async function sendPushToTokens(
   tokens: string[],

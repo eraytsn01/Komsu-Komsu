@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertStatusSchema, insertAdvertSchema, insertAnnouncementSchema, insertMessageSchema, insertPrivateMessageSchema } from './schema';
+// import edilen eski drizzle/sql şemaları kaldırıldı. Sadece zod ve ortak tipler kullanılacak.
 
 export const errorSchemas = {
   validation: z.object({
@@ -50,6 +50,7 @@ export const api = {
         street: z.string().min(1),
         streetType: z.string().min(1),
         doorNo: z.string().min(1),
+        innerDoorNo: z.string().min(1),
       }),
       responses: {
         201: z.object({ message: z.string(), isApproved: z.boolean(), userId: z.number() }),
@@ -112,7 +113,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/statuses' as const,
-      input: insertStatusSchema.pick({ content: true, imageUrl: true }),
+      input: z.object({ content: z.string().optional(), imageUrl: z.string().optional() }),
       responses: {
         201: z.any(),
       }
@@ -143,7 +144,14 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/adverts' as const,
-      input: insertAdvertSchema.pick({ title: true, description: true, price: true, currency: true, imageUrl: true, visibilityRadius: true }),
+      input: z.object({
+        title: z.string(),
+        description: z.string(),
+        price: z.string().optional(),
+        currency: z.string().optional(),
+        imageUrl: z.string().optional(),
+        visibilityRadius: z.number().optional()
+      }),
       responses: {
         201: z.any(),
       }
@@ -175,7 +183,12 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/announcements' as const,
-      input: insertAnnouncementSchema.pick({ title: true, content: true, imageUrl: true, eventDate: true }),
+      input: z.object({
+        title: z.string(),
+        content: z.string(),
+        imageUrl: z.string().optional(),
+        eventDate: z.number().optional()
+      }),
       responses: {
         201: z.any(),
       }
@@ -192,7 +205,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/messages' as const,
-      input: insertMessageSchema.pick({ content: true }),
+      input: z.object({ content: z.string() }),
       responses: {
         201: z.any(),
       }
@@ -240,7 +253,13 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/private-messages' as const,
-      input: insertPrivateMessageSchema.pick({ receiverId: true, content: true, fileUrl: true, fileName: true, location: true }),
+      input: z.object({
+        receiverId: z.string(),
+        content: z.string(),
+        fileUrl: z.string().optional(),
+        fileName: z.string().optional(),
+        location: z.string().optional()
+      }),
       responses: {
         201: z.any(),
       }
