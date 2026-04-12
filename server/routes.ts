@@ -1,5 +1,5 @@
-import express, { Express, Request, Response, NextFunction } from "express";
-import { createServer, Server } from "http";
+import { Express, Request, Response, NextFunction } from "express";
+import { Server } from "http";
 import { storage, FirebaseStorage, User } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -8,19 +8,17 @@ import * as turkey from "turkey-neighbourhoods";
 import { sendPushToTokens } from "./firebase-admin";
 import { addPendingStreet, getPendingStreets, approvePendingStreet, rejectPendingStreet } from "./pendingStreets";
 
-const app: Express = express();
-const httpServer: Server = createServer(app);
-const typedStorage: FirebaseStorage = storage as FirebaseStorage;
-
 declare module "express-session" {
   interface SessionData {
     userId?: string;
   }
 }
 
+export async function registerRoutes(httpServer: Server, app: Express) {
+  const typedStorage: FirebaseStorage = storage as FirebaseStorage;
 
-// Admin: Onay bekleyen sokak/cadde/bulvarlar
-app.get("/api/streets/pending-list", async (req: Request, res: Response) => {
+  // Admin: Onay bekleyen sokak/cadde/bulvarlar
+  app.get("/api/streets/pending-list", async (req: Request, res: Response) => {
   const list = await getPendingStreets();
   res.json(list);
 });
@@ -785,3 +783,4 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     const streets = await resolveStreets(city, district, neighborhood);
     res.json(streets);
   });
+}
