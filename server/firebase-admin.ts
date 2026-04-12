@@ -27,7 +27,7 @@ function getFirebaseAdminApp() {
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       privateKey: getPrivateKey(),
     }),
-    databaseURL: process.env.DATABASE_URL,
+    databaseURL: process.env.FIREBASE_DATABASE_URL,
   });
 }
 
