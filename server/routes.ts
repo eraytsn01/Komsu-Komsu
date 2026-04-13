@@ -734,7 +734,9 @@ function registerRoutes(app: express.Application) {
     res.json(streets);
   });
 
-  // BURASI KRİTİK: httpServer oluşturma ve geri döndürme registerRoutes içinde olmalı
+  // httpServer mutlaka registerRoutes fonksiyonu İÇİNDE olmalı
   const httpServer = createServer(app);
   return httpServer;
-} // <--- registerRoutes fonksiyonunu kapatan parantez
+} // <--- Bu süslü parantez registerRoutes fonksiyonunu kapatır.
+
+// En altta başka bir export satırı varsa sil, fonksiyonun başında 'export async function...' olması yeterli.
