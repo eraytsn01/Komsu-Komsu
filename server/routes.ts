@@ -1,4 +1,4 @@
-
+import { createServer, type Server } from "http"; // Bu satır eksikse createServer kırmızı olur
 import express, { Request, Response, NextFunction } from "express";
 import session from "express-session";
 import type { Session, SessionData } from "express-session";
@@ -733,6 +733,8 @@ function registerRoutes(app: express.Application) {
     const streets = await resolveStreets(city, district, neighborhood);
     res.json(streets);
   });
-}
 
-export { registerRoutes };
+  // BURASI KRİTİK: httpServer oluşturma ve geri döndürme registerRoutes içinde olmalı
+  const httpServer = createServer(app);
+  return httpServer;
+} // <--- registerRoutes fonksiyonunu kapatan parantez
