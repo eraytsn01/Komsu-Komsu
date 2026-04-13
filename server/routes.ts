@@ -1,57 +1,33 @@
-import { Express, Request, Response, NextFunction } from "express";
-import { Server } from "http";
-import { storage, FirebaseStorage, User } from "./storage";
-import { api } from "@shared/routes";
-import { z } from "zod";
-import session from "express-session";
-import * as turkey from "turkey-neighbourhoods";
-import { sendPushToTokens } from "./firebase-admin";
-import { addPendingStreet, getPendingStreets, approvePendingStreet, rejectPendingStreet } from "./pendingStreets";
 
+import express, { Request, Response, NextFunction } from "express";
+import session from "express-session";
+import type { Session, SessionData } from "express-session";
+import { storage, FirebaseStorage, User } from "./storage";
+import { api } from "../shared/routes";
+import { z } from "zod";
+const typedStorage = storage;
+// Express session tipi genişletme
 declare module "express-session" {
   interface SessionData {
     userId?: string;
   }
 }
+export { registerRoutes };
+import { addPendingStreet, getPendingStreets, approvePendingStreet, rejectPendingStreet } from "./pendingStreets";
+import { sendPushToTokens } from "./firebase-admin";
+import * as turkey from "turkey-neighbourhoods";
 
-export async function registerRoutes(httpServer: Server, app: Express) {
-  const typedStorage: FirebaseStorage = storage as FirebaseStorage;
-
-  // Admin: Onay bekleyen sokak/cadde/bulvarlar
-  app.get("/api/streets/pending-list", async (req: Request, res: Response) => {
-  const list = await getPendingStreets();
-  res.json(list);
-});
-app.post("/api/streets/pending-approve/:id", async (req: Request, res: Response) => {
-  // ...existing code...
-  const ok = await rejectPendingStreet(req.params.id);
-  res.json({ success: ok });
-});
-// Elle girilen sokak/cadde/bulvar admin onayına düşsün
-app.post("/api/streets/pending", async (req: Request, res: Response) => {
-  const { city, district, neighborhood, street, type } = req.body;
-  if (!city || !district || !neighborhood || !street || !type) {
-    return res.status(400).json({ message: "Eksik bilgi" });
-  }
-  const id = await addPendingStreet(city, district, neighborhood, street, type);
-  res.json({ success: true, id });
-});
-
-  // ...existing code...
-// ...existing code...
+// --- Yardımcı Fonksiyonlar ve Değişkenler ---
 function getUserIdFromHeader(req: Request) {
   const rawUserId = req.header("x-user-id");
   if (!rawUserId) return undefined;
-
   const userId = Number.parseInt(rawUserId, 10);
   return Number.isNaN(userId) ? undefined : userId;
 }
-
 function getSingleParam(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
 }
-
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     const headerUserId = getUserIdFromHeader(req);
@@ -59,13 +35,11 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
       req.session.userId = String(headerUserId);
     }
   }
-
   if (!req.session.userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
   next();
 }
-
 async function notifyUsersByIds(userIds: string[], payload: { title: string; body: string; data?: Record<string, string> }) {
   if (userIds.length === 0) return;
   const users = await Promise.all(userIds.map((id) => typedStorage.getUser(id)));
@@ -75,7 +49,6 @@ async function notifyUsersByIds(userIds: string[], payload: { title: string; bod
     .filter((token): token is string => !!token);
   await sendPushToTokens(tokens, payload);
 }
-
 async function notifyBuildingUsers(
   buildingId: string,
   excludedUserId: string,
@@ -88,30 +61,18 @@ async function notifyBuildingUsers(
     .filter((token: string | undefined): token is string => !!token);
   await sendPushToTokens(tokens, payload);
 }
-// Eksik storage fonksiyonları için stub ekle
-if (!('getAllUsersInBuilding' in storage)) {
-  (storage as any).getAllUsersInBuilding = async (buildingId: string) => [];
-}
-if (!('getStreets' in storage)) {
-  (storage as any).getStreets = async (city: string, district: string, neighborhood: string) => [];
-}
-
 type StreetOption = { street: string; type: string };
-
 const streetsCache = new Map<string, StreetOption[]>();
 const cityCodeByName = new Map(
   turkey.getCities().map((city) => [city.name.toLocaleLowerCase("tr-TR"), city.code]),
 );
-
 function getCityCode(city: string): string | undefined {
   return cityCodeByName.get(city.toLocaleLowerCase("tr-TR"));
 }
-
 function inferStreetType(name: string, highway?: string): string {
   const n = name.toLocaleLowerCase("tr-TR");
   if (n.includes("bulvar") || n.includes("blv")) return "boulevard";
   if (n.includes("cadde") || n.includes("cd.")) return "avenue";
-
   if (["motorway", "trunk", "primary", "secondary"].includes(String(highway))) {
     return "boulevard";
   }
@@ -120,7 +81,6 @@ function inferStreetType(name: string, highway?: string): string {
   }
   return "street";
 }
-
 async function fetchStreetsFromOsm(city: string, district: string, neighborhood: string): Promise<StreetOption[]> {
   const neighborhoodVariants = Array.from(
     new Set([
@@ -129,7 +89,6 @@ async function fetchStreetsFromOsm(city: string, district: string, neighborhood:
       neighborhood.replace(/\bMh\.?\b/gi, "Mahallesi"),
     ]),
   );
-
   const resolveBbox = async (q: string) => {
     const nominatim = await fetch(
       `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`,
@@ -146,19 +105,15 @@ async function fetchStreetsFromOsm(city: string, district: string, neighborhood:
     if (!bbox || bbox.length < 4) return undefined;
     return bbox;
   };
-
   let bbox: string[] | undefined;
   for (const n of neighborhoodVariants) {
     bbox = await resolveBbox(`${n}, ${district}, ${city}, Türkiye`);
     if (bbox) break;
   }
-
   if (!bbox) {
     bbox = await resolveBbox(`${district}, ${city}, Türkiye`);
   }
-
   if (!bbox) return [];
-
   const [south, north, west, east] = bbox;
   const overpassQuery = `[out:json][timeout:20];way["highway"]["name"](${south},${west},${north},${east});out tags;`;
   const overpass = await fetch("https://overpass-api.de/api/interpreter", {
@@ -166,13 +121,10 @@ async function fetchStreetsFromOsm(city: string, district: string, neighborhood:
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: `data=${encodeURIComponent(overpassQuery)}`,
   });
-
   if (!overpass.ok) return [];
-
   const payload = await overpass.json() as {
-    elements?: Array<{ tags?: { name?: string; highway?: string } }>;
+    elements?: Array<{ tags?: { name?: string; highway?: string } }>
   };
-
   const map = new Map<string, StreetOption>();
   for (const el of payload.elements ?? []) {
     const name = el.tags?.name?.trim();
@@ -181,11 +133,9 @@ async function fetchStreetsFromOsm(city: string, district: string, neighborhood:
       map.set(name, { street: name, type: inferStreetType(name, el.tags?.highway) });
     }
   }
-
   let streets = Array.from(map.values())
     .sort((a, b) => a.street.localeCompare(b.street, "tr"))
     .slice(0, 300);
-
   if (streets.length === 0) {
     const districtBbox = await resolveBbox(`${district}, ${city}, Türkiye`);
     if (districtBbox && districtBbox.length >= 4) {
@@ -196,12 +146,10 @@ async function fetchStreetsFromOsm(city: string, district: string, neighborhood:
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `data=${encodeURIComponent(districtOverpassQuery)}`,
       });
-
       if (districtOverpass.ok) {
         const districtPayload = await districtOverpass.json() as {
-          elements?: Array<{ tags?: { name?: string; highway?: string } }>;
+          elements?: Array<{ tags?: { name?: string; highway?: string } }>
         };
-
         const districtMap = new Map<string, StreetOption>();
         for (const el of districtPayload.elements ?? []) {
           const name = el.tags?.name?.trim();
@@ -210,34 +158,27 @@ async function fetchStreetsFromOsm(city: string, district: string, neighborhood:
             districtMap.set(name, { street: name, type: inferStreetType(name, el.tags?.highway) });
           }
         }
-
         streets = Array.from(districtMap.values())
           .sort((a, b) => a.street.localeCompare(b.street, "tr"))
           .slice(0, 300);
       }
     }
   }
-
   return streets;
 }
-
 async function resolveStreets(city: string, district: string, neighborhood: string): Promise<StreetOption[]> {
   const dbStreets = await typedStorage.getStreets(city, district, neighborhood);
   if (dbStreets.length > 0) return dbStreets;
-
   const key = `${city}|${district}|${neighborhood}`;
   if (streetsCache.has(key)) {
     return streetsCache.get(key)!;
   }
-
   try {
     const streets = await fetchStreetsFromOsm(city, district, neighborhood);
     if (streets.length > 0) {
       streetsCache.set(key, streets);
       return streets;
     }
-    // OSM'den sonuç gelmezse turkey-neighbourhoods ile fallback (pakette doğrudan sokak listesi yok)
-    // En azından mahalle adını sokak olarak ekle
     if (neighborhood) {
       const mapped = [{ street: neighborhood, type: "street" }];
       streetsCache.set(key, mapped);
@@ -246,10 +187,20 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     return [];
   } catch (err) {
     console.error("OSM Fetch Error:", err);
-    // OSM ve turkey-neighbourhoods başarısızsa boş dizi dön
     return [];
   }
 }
+// Eksik storage fonksiyonları için stub ekle
+if (!("getAllUsersInBuilding" in storage)) {
+  (storage as any).getAllUsersInBuilding = async (buildingId: string) => [];
+}
+if (!("getStreets" in storage)) {
+  (storage as any).getStreets = async (city: string, district: string, neighborhood: string) => [];
+}
+
+// --- Route Tanımları ---
+function registerRoutes(app: express.Application) {
+
 
   // Sadece bellek içi session kullanılacak (veya Firebase tabanlı session yönetimi eklenebilir)
   app.use(session({
@@ -498,7 +449,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.json({ message: "Deleted" });
   });
 
-  app.get(api.announcements.list.path, requireAuth, async (req, res) => {
+  app.get(api.announcements.list.path, requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
     const items = await typedStorage.getAnnouncementsByBuilding(user!.buildingId!);
     const withInteractions = await Promise.all(
@@ -510,7 +461,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.status(200).json(withInteractions);
   });
 
-  app.post(api.announcements.create.path, requireAuth, async (req, res) => {
+  app.post(api.announcements.create.path, requireAuth, async (req: Request, res: Response) => {
     const input = api.announcements.create.input.parse(req.body);
     const user = await storage.getUser(req.session.userId!);
     if (!user?.isAdmin) return res.status(403).json({ message: "Only admin can create announcements" });
@@ -525,7 +476,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.status(201).json(announcement);
   });
 
-  app.patch('/api/announcements/:id', requireAuth, async (req, res) => {
+  app.patch('/api/announcements/:id', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
     const ann = await typedStorage.getAnnouncement(String(id));
@@ -535,7 +486,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.json(updated);
   });
 
-  app.delete('/api/announcements/:id', requireAuth, async (req, res) => {
+  app.delete('/api/announcements/:id', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
     const ann = await storage.getAnnouncement(String(id));
@@ -545,7 +496,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.json({ message: "Deleted" });
   });
 
-  app.post('/api/announcements/:id/rsvp', requireAuth, async (req, res) => {
+  app.post('/api/announcements/:id/rsvp', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const input = z.object({ response: z.enum(["attending", "not_attending"]) }).parse(req.body);
     const user = await storage.getUser(req.session.userId!);
@@ -557,7 +508,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.status(200).json(summary);
   });
 
-  app.post('/api/announcements/:id/reaction', requireAuth, async (req, res) => {
+  app.post('/api/announcements/:id/reaction', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const input = z.object({ type: z.enum(["like", "dislike"]) }).parse(req.body);
     const user = await storage.getUser(req.session.userId!);
@@ -569,13 +520,13 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.status(200).json(summary);
   });
 
-  app.get(api.messages.list.path, requireAuth, async (req, res) => {
+  app.get(api.messages.list.path, requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
     const messages = await typedStorage.getMessagesByBuilding(user!.buildingId!);
     res.status(200).json(messages);
   });
 
-  app.post(api.messages.create.path, requireAuth, async (req, res) => {
+  app.post(api.messages.create.path, requireAuth, async (req: Request, res: Response) => {
     const input = api.messages.create.input.parse(req.body);
     const user = await storage.getUser(req.session.userId!);
     const message = await typedStorage.createMessage(user!.id, { ...input, senderId: user!.id, buildingId: user!.buildingId! });
@@ -589,7 +540,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.status(201).json(message);
   });
 
-  app.delete('/api/messages/:id', requireAuth, async (req, res) => {
+  app.delete('/api/messages/:id', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     const user = await storage.getUser(req.session.userId!);
     const msg = await typedStorage.getMessage(String(id));
@@ -599,20 +550,20 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.json({ message: "Deleted" });
   });
 
-  app.delete('/api/private-messages/:id', requireAuth, async (req, res) => {
+  app.delete('/api/private-messages/:id', requireAuth, async (req: Request, res: Response) => {
     const id = parseInt(getSingleParam(req.params.id), 10);
     await typedStorage.deletePrivateMessage(String(id));
     res.json({ message: "Deleted" });
   });
 
   // Emergency routes
-  app.get(api.emergency.list.path, requireAuth, async (req, res) => {
+  app.get(api.emergency.list.path, requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
     const alerts = await typedStorage.getActiveEmergencyAlerts(user!.locationCode!);
     res.status(200).json(alerts);
   });
 
-  app.post(api.emergency.create.path, requireAuth, async (req, res) => {
+  app.post(api.emergency.create.path, requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
 
     const existing = await typedStorage.getActiveEmergencyAlertByUser(user!.id);
@@ -639,7 +590,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.status(201).json({ ...alert, alreadyActive: false });
   });
 
-  app.post(api.emergency.resolve.path, requireAuth, async (req, res) => {
+  app.post(api.emergency.resolve.path, requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
     if (!user?.isAdmin) return res.status(403).json({ message: "Only admin can resolve alerts" });
 
@@ -650,7 +601,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
   });
 
   // Private messages
-  app.get('/api/conversations', requireAuth, async (req, res) => {
+  app.get('/api/conversations', requireAuth, async (req: Request, res: Response) => {
     const convs = await typedStorage.getConversations(req.session.userId!);
     res.json(convs.map(u => {
       const { password, ...rest } = u;
@@ -658,13 +609,13 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     }));
   });
 
-  app.get('/api/private-messages/:otherUserId', requireAuth, async (req, res) => {
+  app.get('/api/private-messages/:otherUserId', requireAuth, async (req: Request, res: Response) => {
     const otherId = parseInt(getSingleParam(req.params.otherUserId), 10);
     const msgs = await typedStorage.getPrivateMessages(req.session.userId!, otherId);
     res.json(msgs);
   });
 
-  app.post('/api/private-messages', requireAuth, async (req, res) => {
+  app.post('/api/private-messages', requireAuth, async (req: Request, res: Response) => {
     const input = api.privateMessages.create.input.parse(req.body);
     const msg = await typedStorage.createPrivateMessage(req.session.userId!, { ...input, senderId: req.session.userId! });
 
@@ -679,13 +630,13 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
   });
 
   // Ads
-  app.get('/api/ads', requireAuth, async (req, res) => {
+  app.get('/api/ads', requireAuth, async (req: Request, res: Response) => {
     const ads = await typedStorage.getActiveAds();
     res.json(ads);
   });
 
   // Users
-  app.get('/api/users', requireAuth, async (req, res) => {
+  app.get('/api/users', requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
     const users = await typedStorage.getAllUsersInBuilding(user!.buildingId!);
     res.json(users.map(u => {
@@ -694,51 +645,51 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     }));
   });
 
-  app.patch('/api/users/me', requireAuth, async (req, res) => {
+  app.patch('/api/users/me', requireAuth, async (req: Request, res: Response) => {
     const input = api.users.update.input.parse(req.body);
     const updatedUser = await typedStorage.updateUser(req.session.userId!, input);
     const { password, ...rest } = updatedUser || {};
     res.json(rest);
   });
 
-  app.post('/api/users/push-token', requireAuth, async (req, res) => {
+  app.post('/api/users/push-token', requireAuth, async (req: Request, res: Response) => {
     const input = z.object({ token: z.string().min(10) }).parse(req.body);
     const updatedUser = await typedStorage.updateUser(req.session.userId!, { fcmToken: input.token });
     const { password, ...rest } = updatedUser || {};
     res.status(200).json(rest);
   });
 
-  app.get('/api/users/search', requireAuth, async (req, res) => {
+  app.get('/api/users/search', requireAuth, async (req: Request, res: Response) => {
     const q = req.query.q as string;
     const results = await typedStorage.searchUsers(q);
     res.json(results.map(({ password, ...u }) => u));
   });
 
-  app.get('/api/users/nearby', requireAuth, async (req, res) => {
+  app.get('/api/users/nearby', requireAuth, async (req: Request, res: Response) => {
     const lat = parseFloat(req.query.lat as string);
     const lon = parseFloat(req.query.lon as string);
     const results = await typedStorage.getNearbyUsers(lat, lon, 0.5); // 500m
     res.json(results.map(({ password, ...u }) => u));
   });
 
-  app.post('/api/users/:id/block', requireAuth, async (req, res) => {
+  app.post('/api/users/:id/block', requireAuth, async (req: Request, res: Response) => {
     await typedStorage.blockUser(req.session.userId!, parseInt(getSingleParam(req.params.id), 10));
     res.json({ success: true });
   });
 
-  app.post('/api/users/:id/report', requireAuth, async (req, res) => {
+  app.post('/api/users/:id/report', requireAuth, async (req: Request, res: Response) => {
     await typedStorage.reportUser(req.session.userId!, parseInt(getSingleParam(req.params.id), 10), req.body.reason);
     res.json({ success: true });
   });
 
   // Locations
-  app.get('/api/locations/cities', async (req, res) => {
+  app.get('/api/locations/cities', async (req: Request, res: Response) => {
     const dbCities = await typedStorage.getCities();
     const cities = dbCities.length > 0 ? dbCities : turkey.getCities().map((c) => c.name);
     res.json(cities);
   });
 
-  app.get('/api/locations/districts', async (req, res) => {
+  app.get('/api/locations/districts', async (req: Request, res: Response) => {
     const city = req.query.city as string;
     if (!city) return res.status(400).json({ message: "City required" });
     const dbDistricts = await typedStorage.getDistricts(city);
@@ -750,7 +701,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.json(districts);
   });
 
-  app.get('/api/locations/neighborhoods', async (req, res) => {
+  app.get('/api/locations/neighborhoods', async (req: Request, res: Response) => {
     const city = req.query.city as string;
     const district = req.query.district as string;
     if (!city || !district) return res.status(400).json({ message: "City and district required" });
@@ -773,7 +724,7 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     res.json(neighborhoods);
   });
 
-  app.get('/api/locations/streets', async (req, res) => {
+  app.get('/api/locations/streets', async (req: Request, res: Response) => {
     const city = req.query.city as string;
     const district = req.query.district as string;
     const neighborhood = req.query.neighborhood as string;
@@ -783,4 +734,3 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
     const streets = await resolveStreets(city, district, neighborhood);
     res.json(streets);
   });
-}

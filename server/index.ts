@@ -1,10 +1,16 @@
+// Firebase Database URL ortam değişkenini elle set et (ekstra garanti için)
+process.env.FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL || "https://komsukomsu-1282f-default-rtdb.europe-west1.firebasedatabase.app";
+console.log("FIREBASE_DATABASE_URL (index.ts):", process.env.FIREBASE_DATABASE_URL);
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
+import path from "path";
 import { createServer } from "http";
 import cors from "cors";
 
 const app = express();
+// 'public' klasöründeki her şeyi internete açar (heroku/railway uyumlu)
+app.use('/public', express.static(path.join(process.cwd(), 'public')));
 const httpServer = createServer(app);
 
 declare module "http" {

@@ -135,8 +135,8 @@ export class FirebaseStorage {
         longitude: null,
       }));
     }
-  db: Database | null | undefined;
-  constructor(db: Database | null | undefined) {
+  db: Database;
+  constructor(db: Database) {
     this.db = db;
   }
 
@@ -251,4 +251,5 @@ export class FirebaseStorage {
 
 // Kullanım: const storage = new FirebaseStorage(db);
 
-export const storage = db ? new FirebaseStorage(db) : new FirebaseStorage(null);
+import { db } from "./firebase-admin";
+export const storage = new FirebaseStorage(db);

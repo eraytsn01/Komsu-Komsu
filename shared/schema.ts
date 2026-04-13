@@ -75,4 +75,3 @@ export interface EmergencyAlert {
   createdAt: number;
   resolvedAt?: number;
 }
-  createdAt: timestamp("created_at").defaultNow(),
