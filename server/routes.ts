@@ -734,3 +734,4 @@ function registerRoutes(app: express.Application) {
     const streets = await resolveStreets(city, district, neighborhood);
     res.json(streets);
   });
+}
