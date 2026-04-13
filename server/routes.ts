@@ -12,7 +12,6 @@ declare module "express-session" {
     userId?: string;
   }
 }
-export { registerRoutes };
 import { addPendingStreet, getPendingStreets, approvePendingStreet, rejectPendingStreet } from "./pendingStreets";
 import { sendPushToTokens } from "./firebase-admin";
 import * as turkey from "turkey-neighbourhoods";
@@ -735,3 +734,5 @@ function registerRoutes(app: express.Application) {
     res.json(streets);
   });
 }
+
+export { registerRoutes };
