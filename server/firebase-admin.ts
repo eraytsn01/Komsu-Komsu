@@ -20,18 +20,18 @@ function isFirebaseAdminConfigured() {
 }
 
 function getFirebaseAdminApp() {
-  // 1. Önce Railway'deki değişkeni bir sabit değişkene al ve \n karakterlerini düzelt
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY
-    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-    : undefined;
-  // 2. Firebase'i bu düzeltilmiş anahtarla başlat
+  // 1. Önce Railway'deki değişkeni bir sabit değişkene al
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY;
+  // 2. Eğer anahtar varsa, hatalı kaçış karakterlerini (\n) gerçek alt satıra çevir
+  const formattedKey = rawKey ? rawKey.replace(/\\n/g, '\n') : undefined;
+  // 3. Firebase'i bu temizlenmiş anahtar ile başlat
   return initializeApp({
     credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey,
+      privateKey: formattedKey, // BURASI ÖNEMLİ: 'rawKey' değil 'formattedKey' kullanıyoruz
     }),
-    databaseURL: "https://komsu-komsu-v2-default-rtdb.firebaseio.com"
+    databaseURL: process.env.FIREBASE_DATABASE_URL,
   });
 }
 
