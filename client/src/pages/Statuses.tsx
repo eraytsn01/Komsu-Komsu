@@ -337,4 +337,4 @@ export default function Statuses() {
       </section>
     </MobileContainer>
   );
-}
+} 
