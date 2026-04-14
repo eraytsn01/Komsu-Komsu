@@ -8,3 +8,4 @@ client/public/firebase-messaging-sw.js
 dist/public/firebase-messaging-sw.js
 .DS_Store
 *.zip
+.vercel
