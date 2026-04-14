@@ -321,19 +321,18 @@ export default function Statuses() {
           </div>
         </div>
       )}
+      {/* APK İndirme Bölümü */}
+      <section id="download" style={{ textAlign: "center", padding: 32, marginBottom: 24 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 800, color: "#2563eb", marginBottom: 8 }}>Komşu Komşu Yayında!</h2>
+        <p style={{ fontSize: 16, marginBottom: 18 }}>Mahallendeki yardımlaşmaya katılmak için hemen indir.</p>
+        <a href="/app-debug.apk" download="KomsuKomsu.apk">
+          <button style={{ background: "#2563eb", color: "white", padding: "15px 30px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
+            Android APK İndir
+          </button>
+        </a>
+        <div style={{ marginTop: 10, color: '#b91c1c', fontSize: 13, fontWeight: 500 }}>
+          <span>Not: Android telefonlar Play Store dışı indirmelerde uyarı verebilir. <br />
+          "Uygulamamız güvenlidir, kurulum için bilinmeyen kaynaklara izin veriniz."</span>
+        </div>
+      </section>
     </MobileContainer>
-        {/* APK İndirme Bölümü */}
-        <section id="download" style={{ textAlign: "center", padding: 32, marginBottom: 24 }}>
-          <h2 style={{ fontSize: 28, fontWeight: 800, color: "#2563eb", marginBottom: 8 }}>Komşu Komşu Yayında!</h2>
-          <p style={{ fontSize: 16, marginBottom: 18 }}>Mahallendeki yardımlaşmaya katılmak için hemen indir.</p>
-          <a href="/app-debug.apk" download="KomsuKomsu.apk">
-            <button style={{ background: "#2563eb", color: "white", padding: "15px 30px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
-              Android APK İndir
-            </button>
-          </a>
-          <div style={{ marginTop: 10, color: '#b91c1c', fontSize: 13, fontWeight: 500 }}>
-            <span>Not: Android telefonlar Play Store dışı indirmelerde uyarı verebilir. <br />
-            "Uygulamamız güvenlidir, kurulum için bilinmeyen kaynaklara izin veriniz."</span>
-          </div>
-        </section>
-}
