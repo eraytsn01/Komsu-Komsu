@@ -20,6 +20,7 @@ import Profile from "./pages/Profile";
 import Approvals from "./pages/admin/Approvals";
 import NotificationSettings from "./pages/settings/NotificationSettings";
 import { NotificationWatcher } from "./components/NotificationWatcher";
+import Landing from "./pages/Landing";
 
 // Auth Guard Component
 function ProtectedRoute({ component: Component, adminOnly = false }: { component: any, adminOnly?: boolean }) {
@@ -52,7 +53,10 @@ function Router() {
       {/* Public Routes */}
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      
+
+      {/* Landing Page - Herkese açık */}
+      <Route path="/" component={Landing} />
+
       {/* Pending Route */}
       <Route path="/pending-approval">
         {user ? <PendingApproval /> : <Redirect to="/login" />}
@@ -64,13 +68,13 @@ function Router() {
       </Route>
 
       {/* App Routes */}
-      <Route path="/" component={() => <ProtectedRoute component={Statuses} />} />
+      <Route path="/statuses" component={() => <ProtectedRoute component={Statuses} />} />
       <Route path="/adverts" component={() => <ProtectedRoute component={Adverts} />} />
       <Route path="/announcements" component={() => <ProtectedRoute component={Announcements} />} />
       <Route path="/chat" component={() => <ProtectedRoute component={Chat} />} />
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/settings/notifications" component={() => <ProtectedRoute component={NotificationSettings} />} />
-      
+
       {/* Admin Route */}
       <Route path="/admin/approvals" component={() => <ProtectedRoute component={Approvals} adminOnly={true} />} />
 
