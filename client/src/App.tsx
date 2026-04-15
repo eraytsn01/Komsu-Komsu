@@ -20,7 +20,7 @@ import Profile from "./pages/Profile";
 import Approvals from "./pages/admin/Approvals";
 import NotificationSettings from "./pages/settings/NotificationSettings";
 import { NotificationWatcher } from "./components/NotificationWatcher";
-import Landing from "./pages/Landing";
+import Home from "./pages/Home";
 
 // Auth Guard Component
 function ProtectedRoute({ component: Component, adminOnly = false }: { component: any, adminOnly?: boolean }) {
@@ -45,17 +45,14 @@ function ProtectedRoute({ component: Component, adminOnly = false }: { component
   return <Component />;
 }
 
-function Router() {
   const { user } = useAuth();
 
   return (
     <Switch>
       {/* Public Routes */}
+      <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-
-      {/* Landing Page - Herkese açık */}
-      <Route path="/" component={Landing} />
 
       {/* Pending Route */}
       <Route path="/pending-approval">
