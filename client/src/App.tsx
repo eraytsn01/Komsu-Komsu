@@ -45,6 +45,7 @@ function ProtectedRoute({ component: Component, adminOnly = false }: { component
   return <Component />;
 }
 
+function Router() {
   const { user } = useAuth();
 
   return (
