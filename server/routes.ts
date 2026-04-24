@@ -17,9 +17,6 @@ import { sendPushToTokens } from "./firebase-admin";
 // @ts-ignore
 import * as turkey from "turkey-neighbourhoods";
 
-// SMS doğrulama kodları için geçici bellek (in-memory)
-const pendingVerifications = new Map<string, { code: string; expires: number }>();
-
 // --- Yardımcı Fonksiyonlar ve Değişkenler ---
 function getUserIdFromHeader(req: Request) {
   const rawUserId = req.header("x-user-id");
@@ -196,6 +193,9 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
 
 export function registerRoutes(app: express.Application) {
 
+  // SMS doğrulama kodları (Derleyicinin silmemesi için Express.js'in kendi belleğine kaydediyoruz)
+  app.locals.pendingVerifications = new Map<string, { code: string; expires: number }>();
+
   // Sadece bellek içi session kullanılacak (veya Firebase tabanlı session yönetimi eklenebilir)
   app.use(session({
     secret: process.env.SESSION_SECRET || 'komsum-secret',
@@ -305,7 +305,7 @@ export function registerRoutes(app: express.Application) {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     
     // Kodu session yerine geçici belleğe kaydediyoruz.
-    pendingVerifications.set(cleanPhone, { code, expires: Date.now() + 5 * 60 * 1000 }); // 5 dakika geçerli
+    req.app.locals.pendingVerifications.set(cleanPhone, { code, expires: Date.now() + 5 * 60 * 1000 }); // 5 dakika geçerli
 
     // **TEST İÇİN KODU KONSOLA YAZDIRIYORUZ**
     console.log(`--- SMS DOĞRULAMA KODU (${cleanPhone}): ${code} ---`);
@@ -356,7 +356,7 @@ export function registerRoutes(app: express.Application) {
     const { phone, code } = req.body;
     const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
     const cleanCode = code ? code.trim() : '';
-    const record = pendingVerifications.get(cleanPhone);
+    const record = req.app.locals.pendingVerifications.get(cleanPhone);
 
     // Terminalde sorunun ne olduğunu görmek için logluyoruz:
     console.log(`[SMS Verify Log] Tel: ${cleanPhone} | Girilen: ${cleanCode} | Beklenen: ${record?.code}`);
@@ -364,7 +364,7 @@ export function registerRoutes(app: express.Application) {
     // Master test kodu (123456) HER ZAMAN çalışır, eşleşme aranmaz!
     if (cleanCode === '123456' || (record && record.code === cleanCode && record.expires > Date.now())) {
       // Kod doğru, bellekten siliyoruz.
-      pendingVerifications.delete(cleanPhone);
+      req.app.locals.pendingVerifications.delete(cleanPhone);
       res.status(200).json({ message: 'Telefon başarıyla doğrulandı.' });
     } else {
       res.status(400).json({ message: 'Doğrulama kodu yanlış veya süresi dolmuş.' });

@@ -11,18 +11,6 @@ import path from "path";
 import { createServer } from "http";
 import cors from "cors";
 
-// allowedOrigins en üstte tanımlanmalı
-const allowedOrigins = [
-  'https://localhost',
-  'http://localhost',
-  'http://localhost:5173',
-  'https://localhost:5173',
-  'https://komsukomsu.online',
-  'https://www.komsukomsu.online',
-];
-
-
-
 const app = express();
 const httpServer = createServer(app);
 
@@ -34,16 +22,9 @@ function log(message: string) {
 // CORS ayarları EN BAŞTA ve sadece bir kez
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Mobilde origin undefined olabilir, onu da kabul et
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.railway.app') || process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
+    origin: true, // Gelen tüm Origin (kaynak) isteklerini otomatik olarak kabul et (Mobil ve Web çakışmalarını kökünden çözer)
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], // PATCH eklendi
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'x-user-id'],
     exposedHeaders: ['Content-Type', 'Authorization'],
   })

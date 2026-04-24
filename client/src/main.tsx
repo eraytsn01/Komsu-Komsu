@@ -10,9 +10,8 @@ let apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.repl
 
 // ŞU ANKİ TEST AŞAMASI İÇİN ZORUNLU YÖNLENDİRME (Canlıya çıkarken komsukomsu.online yapacağız)
 if (Capacitor.getPlatform() === 'android') {
-	// Eğer canlı ortam için (VITE_API_BASE_URL) bir adres verilmişse onu kullan
-	// Verilmemişse test aşamasında olduğumuzu varsay ve localhost kullan
-	apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5050";
+	// CANLI SUNUCU BAĞLANTISI (Artık .env ile uğraşmıyoruz, kalıcı olarak canlı linki yazıyoruz)
+	apiBaseUrl = "https://komsukomsu.online";
 }
 
 const appendAuthHeader = (headers?: HeadersInit) => {
