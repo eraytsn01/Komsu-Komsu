@@ -203,8 +203,8 @@ function Register() {
       if (selectedImage) {
         const fileExt = selectedImage.name.split('.').pop();
         const imageRef = ref(storage, `avatars/user_${Date.now()}.${fileExt}`);
-        const snapshot = await uploadBytes(imageRef, selectedImage);
-        finalAvatarUrl = await getDownloadURL(snapshot);
+        await uploadBytes(imageRef, selectedImage);
+        finalAvatarUrl = await getDownloadURL(imageRef);
       }
 
       const res = await fetch(`/api/auth/register`, {

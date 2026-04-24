@@ -139,7 +139,7 @@ export class FirebaseStorage {
       const user = data as User;
       if (user.latitude && user.longitude) {
         const dist = calculateDistance(lat, lon, user.latitude, user.longitude);
-        if (dist <= radius) nearby.push({ id, ...user, distance: dist });
+        if (dist <= radius) nearby.push({ ...user, id, distance: dist });
       }
     }
     return nearby.sort((a, b) => a.distance - b.distance);
@@ -160,7 +160,7 @@ export class FirebaseStorage {
     const result: User[] = [];
     for (const [id, user] of Object.entries(users as Record<string, any> || {})) {
       if ((user as User).buildingId === buildingId) {
-        result.push({ id, ...(user as User) });
+        result.push({ ...(user as User), id });
       }
     }
     return result;

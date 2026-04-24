@@ -17,6 +17,9 @@ import { sendPushToTokens } from "./firebase-admin";
 // @ts-ignore
 import * as turkey from "turkey-neighbourhoods";
 
+// SMS doğrulama kodları için geçici bellek (in-memory)
+const pendingVerifications = new Map<string, { code: string; expires: number }>();
+
 // --- Yardımcı Fonksiyonlar ve Değişkenler ---
 function getUserIdFromHeader(req: Request) {
   const rawUserId = req.header("x-user-id");
