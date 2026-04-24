@@ -18,6 +18,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'https://localhost:5173',
   'https://komsukomsu.online',
+  'https://www.komsukomsu.online',
 ];
 
 
@@ -35,7 +36,7 @@ app.use(
   cors({
     origin: function (origin, callback) {
       // Mobilde origin undefined olabilir, onu da kabul et
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.railway.app') || process.env.NODE_ENV !== 'production') {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -155,7 +156,7 @@ app.post('/api/dask', async (req, res) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5050", 10);
+  const port = parseInt(process.env.PORT || "8080", 10);
   httpServer.listen(
     {
       port,
