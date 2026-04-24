@@ -1,7 +1,7 @@
 
-// Firebase Database URL ortam değişkenini elle set et
+// Firebase Database URL ortam değişkenini öncelikle .env üzerinden almayı dener.
 
-process.env.FIREBASE_DATABASE_URL = "https://komsukomsu-1282f-default-rtdb.europe-west1.firebasedatabase.app";
+process.env.FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL || "https://komsukomsu-1282f-default-rtdb.europe-west1.firebasedatabase.app";
 process.env.DATABASE_URL = process.env.FIREBASE_DATABASE_URL;
 console.log("FIREBASE_DATABASE_URL:", process.env.FIREBASE_DATABASE_URL);
 console.log("DATABASE_URL:", process.env.DATABASE_URL);

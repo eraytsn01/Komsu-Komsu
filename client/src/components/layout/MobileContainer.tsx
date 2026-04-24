@@ -3,11 +3,14 @@ import { useLocation } from "wouter";
 import { BottomNav } from "./BottomNav";
 import { EmergencyButton } from "../EmergencyButton";
 
+import { useAuth } from "@/hooks/use-auth";
+
 export function MobileContainer({ children, showNav = true }: { children: ReactNode; showNav?: boolean }) {
   const [location, setLocation] = useLocation();
   const gestureRef = useRef({ startX: 0, startY: 0, startAt: 0, tracking: false });
+  const { user } = useAuth();
   const hideEmergencyOnRoutes = ["/login", "/register"];
-  const showEmergencyButton = !hideEmergencyOnRoutes.includes(location);
+  const showEmergencyButton = user && !hideEmergencyOnRoutes.includes(location);
 
   const tabRoutes = ["/", "/adverts", "/announcements", "/chat", "/profile"];
 
@@ -67,10 +70,8 @@ export function MobileContainer({ children, showNav = true }: { children: ReactN
   return (
     <div className="min-h-screen bg-gray-100 sm:py-8 flex items-center justify-center font-sans selection:bg-primary/20">
       <div className="w-full h-screen sm:h-[850px] sm:max-w-[400px] bg-background sm:rounded-[2.5rem] sm:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] overflow-hidden relative flex flex-col sm:border-8 border-gray-900 ring-1 ring-border/50">
-        
         {/* Dynamic Island / Notch illusion on desktop simulator */}
         <div className="hidden sm:block absolute top-0 inset-x-0 h-7 bg-gray-900 rounded-b-3xl w-40 mx-auto z-50"></div>
-        
         {/* Main scrollable content area */}
         <div
           className="flex-1 overflow-y-auto hide-scrollbar relative bg-slate-50/50 flex flex-col"
@@ -81,10 +82,9 @@ export function MobileContainer({ children, showNav = true }: { children: ReactN
             {children}
           </div>
         </div>
-
         {showEmergencyButton && <EmergencyButton />}
-
-        {showNav && <BottomNav />}
+        {/* Alt menü sadece giriş yapan kullanıcıya gösterilsin */}
+        {showNav && user && <BottomNav />}
       </div>
     </div>
   );

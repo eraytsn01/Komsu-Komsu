@@ -1,11 +1,12 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.example.app',
+  appId: 'com.komsukomsu.app',
   appName: 'Komşu Komşu',
   webDir: 'dist/public',
   server: {
-    androidScheme: 'http'
+    androidScheme: 'http',
+    cleartext: true
   }
 };
 

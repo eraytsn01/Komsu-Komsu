@@ -1,49 +1,48 @@
-import { useState } from "react";
-import PhoneVerify from "./PhoneVerify";
-import { useEffect } from "react";
-import { useRef } from "react";
-import { useAuth } from "@/hooks/use-auth";
 import { MobileContainer } from "@/components/layout/MobileContainer";
-import { Link, useLocation } from "wouter";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Camera, ImagePlus, User as UserIcon } from "lucide-react";
+import { Link } from "wouter";
+import { ArrowLeft, User as UserIcon, Camera, ImagePlus, Loader2, CheckCircle2 } from "lucide-react";
+import {
+  getCityNames,
+  getCityCodes,
+  getDistrictsByCityCode,
+} from "turkey-neighbourhoods";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-const TURKEY_CITIES = [
-  "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Aksaray", "Amasya", "Ankara", "Antalya", "Ardahan", "Artvin",
-  "Aydın", "Balıkesir", "Bartın", "Batman", "Bayburt", "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur",
-  "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli", "Diyarbakır", "Düzce", "Edirne", "Elazığ", "Erzincan",
-  "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari", "Hatay", "Iğdır", "Isparta", "İstanbul",
-  "İzmir", "Kahramanmaraş", "Karabük", "Karaman", "Kars", "Kastamonu", "Kayseri", "Kırıkkale", "Kırklareli", "Kırşehir",
-  "Kilis", "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Mardin", "Mersin", "Muğla", "Muş",
-  "Nevşehir", "Niğde", "Ordu", "Osmaniye", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop", "Sivas",
-  "Şanlıurfa", "Şırnak", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Uşak", "Van", "Yalova", "Yozgat", "Zonguldak",
-];
+import React, { useState, useEffect, useRef } from "react";
+// Basit hata yakalama için ErrorBoundary yerine try/catch ve fallback UI
+function ErrorBoundary({ children }: { children: React.ReactNode }) {
+  const [error, setError] = useState<Error | null>(null);
+  if (error) {
+    return (
+      <div style={{ color: 'red', padding: 16 }}>
+        <h2>Bir hata oluştu:</h2>
+        <pre>{error.message}</pre>
+      </div>
+    );
+  }
+  return (
+    <React.Fragment>
+      {React.Children.map(children, (child) => {
+        try {
+          return child;
+        } catch (err: any) {
+          setError(err);
+          return null;
+        }
+      })}
+    </React.Fragment>
+  );
+}
 
-const FALLBACK_DISTRICTS = ["Merkez"];
-const FALLBACK_NEIGHBORHOODS = ["Merkez Mahallesi"];
-const FALLBACK_STREETS: StreetOption[] = [
-  { street: "Atatürk", type: "avenue" },
-  { street: "Cumhuriyet", type: "street" },
-  { street: "İnönü", type: "boulevard" },
-];
 
-type StreetOption = { street: string; type: string };
-
-const streetTypeLabel = (type: string) => {
-  if (type === "street") return "Sokak";
-  if (type === "avenue") return "Cadde";
-  if (type === "boulevard") return "Bulvar";
-  return type;
-};
-
-export default function Register() {
+function Register() {
+  // Ana form state
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    phone: "+90 ", // Otomatik +90 ile başlasın
+    phone: "",
     email: "",
-    password: "",
-    passwordConfirm: "",
     avatarUrl: "",
     city: "",
     district: "",
@@ -52,63 +51,139 @@ export default function Register() {
     streetType: "street",
     doorNo: "",
     innerDoorNo: "",
+    password: "",
+    passwordConfirm: "",
   });
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  
+  // SMS Doğrulama State'leri
+  const [verificationCode, setVerificationCode] = useState("");
+  const [isCodeSent, setIsCodeSent] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false); // Ana formun kilidini açar
+  const [verificationError, setVerificationError] = useState("");
+  const [countdown, setCountdown] = useState(0); // 60 Saniyelik sayaç state'i
 
+  const [manualStreet, setManualStreet] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
+  const [cityCodes, setCityCodes] = useState<string[]>([]);
   const [districts, setDistricts] = useState<string[]>([]);
   const [neighborhoods, setNeighborhoods] = useState<string[]>([]);
-  const [streets, setStreets] = useState<StreetOption[]>([]);
+  const [streets, setStreets] = useState<{ street: string; type: string }[]>([]);
   const [isLocationLoading, setIsLocationLoading] = useState(false);
-  const [manualStreet, setManualStreet] = useState(false);
-  const [phoneVerified, setPhoneVerified] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  // Fallbacklar
+  const FALLBACK_STREETS: { street: string; type: string }[] = [];
 
-  const galleryInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  
-  const { register, isRegistering } = useAuth();
-  const [, setLocation] = useLocation();
-  const { toast } = useToast();
+  // Geri sayım sayacı mekanizması
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setInterval(() => setCountdown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [countdown]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.name === "phone") {
-      let value = e.target.value;
-      // Sadece +90 ile başlasın ve 10 hane girilebilsin, otomatik boşluk ekle
-      if (!value.startsWith("+90 ")) value = "+90 ";
-      value = value.replace(/[^0-9]/g, "");
-      value = value.slice(0, 12); // +90 dahil 12 karakter
-      // +90 5XX XXX XX XX formatına otomatik boşluk ekle
-      let formatted = "+90 ";
-      if (value.length > 2) formatted += value.slice(2, 5);
-      if (value.length > 5) formatted += " " + value.slice(5, 8);
-      if (value.length > 8) formatted += " " + value.slice(8, 10);
-      if (value.length > 10) formatted += " " + value.slice(10, 12);
-      setFormData({ ...formData, phone: formatted.trimEnd() });
-    } else if (e.target.name === "innerDoorNo") {
-      // Sadece sayı girilsin
-      let value = e.target.value.replace(/\D/g, "");
-      setFormData({ ...formData, innerDoorNo: value });
-    } else if (e.target.name === "firstName") {
-      // İlk harfi büyük, diğerleri küçük olacak şekilde otomatik düzelt
-      let value = e.target.value;
-      if (value.length > 0) {
-        value = value.charAt(0).toLocaleUpperCase("tr-TR") + value.slice(1).toLocaleLowerCase("tr-TR");
-      }
-      setFormData({ ...formData, firstName: value });
-    } else if (e.target.name === "lastName") {
-      // Sadece büyük harf girilebilsin
-      let value = e.target.value.replace(/[^A-ZÇĞİÖŞÜ\s]/gi, "").toLocaleUpperCase("tr-TR");
-      setFormData({ ...formData, lastName: value });
-    } else {
-      setFormData({ ...formData, [e.target.name]: e.target.value });
+  // Resim seçme fonksiyonu
+  function handleImagePicked(file: File | undefined) {
+    if (!file) return;
+    setSelectedImage(file);
+    setFormData((prev) => ({ ...prev, avatarUrl: URL.createObjectURL(file) }));
+  }
+
+  // Yardımcı fonksiyonlar
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  }
+
+  // Telefon numarasını otomatik formatla (+90 5XX XXX XX XX)
+  function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
+    let val = e.target.value.replace(/\D/g, ""); // Sadece rakamları al
+    if (val.startsWith("90")) val = val.substring(2); // 90 ile başlıyorsa at (zaten ekleyeceğiz)
+
+    let formatted = "+90 ";
+    if (val.length > 0) formatted += val.substring(0, 3);
+    if (val.length > 3) formatted += " " + val.substring(3, 6);
+    if (val.length > 6) formatted += " " + val.substring(6, 8);
+    if (val.length > 8) formatted += " " + val.substring(8, 10);
+
+    setFormData((prev) => ({ ...prev, phone: formatted }));
+  }
+
+  function streetTypeLabel(type: string) {
+    if (type === "avenue") return "Cadde";
+    if (type === "boulevard") return "Bulvar";
+    return "Sokak";
+  }
+
+  // Şehirler ve kodlarını turkey-neighbourhoods ile al
+  useEffect(() => {
+    setCities(getCityNames());
+    setCityCodes(getCityCodes());
+  }, []);
+
+  // İl değişince ilçeleri turkey-neighbourhoods ile çek
+  useEffect(() => {
+    if (!formData.city) {
+      setDistricts([]);
+      setFormData((prev) => ({ ...prev, district: "" }));
+      return;
     }
-  };
+    const cityIdx = cities.findIndex((c) => c === formData.city);
+    const cityCode = cityCodes[cityIdx];
+    if (!cityCode) return;
+    const ilceler = getDistrictsByCityCode(cityCode) || [];
+    setDistricts(ilceler);
+    if (!ilceler.includes(formData.district)) {
+      setFormData((prev) => ({ ...prev, district: "" }));
+    }
+  }, [formData.city, cities, cityCodes]);
+
+  // İlçe değişince mahalleleri çek
+  useEffect(() => {
+    if (!formData.city || !formData.district) {
+      setNeighborhoods([]);
+      setFormData((prev) => ({ ...prev, neighborhood: "", street: "" }));
+      return;
+    }
+    setIsLocationLoading(true);
+    fetch(`/api/locations/neighborhoods?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}`)
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => {
+        setNeighborhoods(data.map((n: any) => n.neighborhood));
+      })
+      .catch(() => setNeighborhoods([]))
+      .finally(() => setIsLocationLoading(false));
+  }, [formData.city, formData.district]);
+
+  // Mahalle değişince sokakları çek
+  useEffect(() => {
+    if (!formData.city || !formData.district || !formData.neighborhood) {
+      setStreets(FALLBACK_STREETS);
+      setFormData((prev) => ({ ...prev, street: "" }));
+      return;
+    }
+    setIsLocationLoading(true);
+    fetch(`/api/locations/streets?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}&neighborhood=${encodeURIComponent(formData.neighborhood)}`)
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => {
+        if (data?.length) {
+          setStreets(data);
+        } else {
+          setStreets(FALLBACK_STREETS);
+        }
+      })
+      .catch(() => setStreets(FALLBACK_STREETS))
+      .finally(() => setIsLocationLoading(false));
+  }, [formData.city, formData.district, formData.neighborhood]);
 
   // Telefon inputuna odaklanınca otomatik +90 ekle
-  const handlePhoneFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+  function handlePhoneFocus(e: React.FocusEvent<HTMLInputElement>) {
     if (!formData.phone.startsWith("+90 ")) {
       setFormData((prev) => ({ ...prev, phone: "+90 " }));
     }
-  };
+  }
+
   // Apartman olmayan yerler için iç kapı no otomatik 0
   useEffect(() => {
     if (formData.neighborhood && /köy|ev/i.test(formData.neighborhood)) {
@@ -116,150 +191,90 @@ export default function Register() {
     }
   }, [formData.neighborhood]);
 
-  const handleImagePicked = (file?: File) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || "");
-      setFormData((prev) => ({ ...prev, avatarUrl: dataUrl }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const apiBase = import.meta.env.VITE_API_BASE_URL || "";
-  useEffect(() => {
-    const loadCities = async () => {
-      try {
-        const res = await fetch(`${apiBase}/api/locations/cities`);
-        if (!res.ok) throw new Error("Şehirler alınamadı");
-        const data = await res.json();
-        setCities(data?.length ? data : TURKEY_CITIES);
-      } catch (err) {
-        console.error(err);
-        setCities(TURKEY_CITIES);
-      }
-    };
-    loadCities();
-  }, [apiBase]);
-
-  useEffect(() => {
-    if (!formData.city) return;
-
-    setIsLocationLoading(true);
-    setDistricts([]);
-    setNeighborhoods([]);
-    setStreets([]);
-    setFormData((prev) => ({ ...prev, district: "", neighborhood: "", street: "", streetType: "street" }));
-
-    fetch(`${apiBase}/api/locations/districts?city=${encodeURIComponent(formData.city)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("İlçeler alınamadı");
-        return res.json();
-      })
-      .then((data) => setDistricts(data?.length ? data : FALLBACK_DISTRICTS))
-      .catch((err) => console.error(err))
-      .finally(() => setIsLocationLoading(false));
-  }, [formData.city, apiBase]);
-
-  useEffect(() => {
-    if (!formData.city || !formData.district) return;
-
-    setIsLocationLoading(true);
-    setNeighborhoods([]);
-    setStreets([]);
-    setFormData((prev) => ({ ...prev, neighborhood: "", street: "", streetType: "street" }));
-
-    fetch(`${apiBase}/api/locations/neighborhoods?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Mahalleler alınamadı");
-        return res.json();
-      })
-      .then((rows) => {
-        const unique = Array.from(new Set((rows as any[]).map((r) => r.neighborhood))).sort();
-        setNeighborhoods(unique.length ? unique : FALLBACK_NEIGHBORHOODS);
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setIsLocationLoading(false));
-  }, [formData.city, formData.district, apiBase]);
-
-  useEffect(() => {
-    if (!formData.city || !formData.district || !formData.neighborhood) return;
-
-    setIsLocationLoading(true);
-    setStreets([]);
-    setFormData((prev) => ({ ...prev, street: "", streetType: "street" }));
-
-    fetch(`${apiBase}/api/locations/streets?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}&neighborhood=${encodeURIComponent(formData.neighborhood)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Sokak/Cadde/Bulvarlar alınamadı");
-        return res.json();
-      })
-      .then((data) => setStreets(data?.length ? data : FALLBACK_STREETS))
-      .catch((err) => console.error(err))
-      .finally(() => setIsLocationLoading(false));
-  }, [formData.city, formData.district, formData.neighborhood, apiBase]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Kayıt submit
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!phoneVerified) {
-      toast({
-        title: "Telefon Doğrulama",
-        description: "Telefon numaranızı doğrulamanız gerekmektedir.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (formData.password !== formData.passwordConfirm) {
-      return toast({
-        title: "Hata",
-        description: "Şifreler eşleşmiyor.",
-        variant: "destructive",
-      });
-    }
-    if (!formData.avatarUrl) {
-      return toast({
-        title: "Hata",
-        description: "Profil fotoğrafı seçmelisiniz.",
-        variant: "destructive",
-      });
-    }
-    if (manualStreet && !formData.street.trim()) {
-      return toast({
-        title: "Hata",
-        description: "Sokak/Cadde/Bulvar adını giriniz.",
-        variant: "destructive",
-      });
-    }
+    setIsRegistering(true);
+    
     try {
-      if (manualStreet && formData.street.trim()) {
-        await fetch((import.meta.env.VITE_API_BASE_URL || "") + "/api/streets/pending", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            city: formData.city,
-            district: formData.district,
-            neighborhood: formData.neighborhood,
-            street: formData.street,
-            type: formData.streetType,
-          }),
-        });
+      let finalAvatarUrl = formData.avatarUrl;
+
+      // Eğer kullanıcı fotoğraf seçtiyse önce Firebase Storage'a yükle
+      if (selectedImage) {
+        const fileExt = selectedImage.name.split('.').pop();
+        const imageRef = ref(storage, `avatars/user_${Date.now()}.${fileExt}`);
+        const snapshot = await uploadBytes(imageRef, selectedImage);
+        finalAvatarUrl = await getDownloadURL(snapshot);
       }
-      const result = await register(formData);
-      toast({
-        title: "Başarılı",
-        description: result?.isApproved
-          ? "Kayıt tamamlandı, ana sayfaya yönlendiriliyorsunuz."
-          : "Kaydınız alındı. Yönetici onayı bekleniyor.",
+
+      const res = await fetch(`/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formData, avatarUrl: finalAvatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=" + formData.firstName }),
       });
-      setLocation(result?.isApproved ? "/" : "/pending-approval");
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Kayıt sırasında bir hata oluştu.");
+      }
+      
+      // Başarılı olursa kullanıcıyı yönlendir (Örn: / onay ekranı)
+      window.location.href = "/";
     } catch (err: any) {
-      toast({
-        title: "Kayıt Başarısız",
-        description: err.message,
-        variant: "destructive",
-      });
+      alert(err.message);
+    } finally {
+      setIsRegistering(false);
     }
-  };
+  }
+
+  // SMS Kodu Gönderme
+  async function handleSendCode() {
+    setVerificationError("");
+    setIsVerifying(true);
+    try {
+      const res = await fetch(`/api/auth/send-sms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: formData.phone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Kod gönderilemedi, lütfen tekrar deneyin.");
+      
+      setIsCodeSent(true);
+      setCountdown(60); // 60 saniyelik sayacı başlat
+
+      // TEST ORTAMI: Kodu konsol yerine direkt ekranda göster
+      if (data.code) {
+        alert(`TEST ORTAMI BİLGİLENDİRMESİ\n\nSMS ile gelen Doğrulama Kodunuz: ${data.code}\n\n(Gerçek bir uygulamada bu size SMS olarak gelirdi)`);
+      }
+    } catch (err: any) {
+      setVerificationError(err.message);
+    } finally {
+      setIsVerifying(false);
+    }
+  }
+
+  // SMS Kodu Doğrulama
+  async function handleVerifyCode() {
+    setVerificationError("");
+    setIsVerifying(true);
+    try {
+      const res = await fetch(`/api/auth/verify-sms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: formData.phone, code: verificationCode }),
+      });
+      if (!res.ok) throw new Error("Doğrulama kodu yanlış veya süresi dolmuş.");
+      setPhoneVerified(true); // Başarılı!
+    } catch (err: any) {
+      setVerificationError(err.message);
+    } finally {
+      setIsVerifying(false);
+    }
+  }
+
+  // JSX
+
 
   return (
     <MobileContainer showNav={false}>
@@ -271,10 +286,65 @@ export default function Register() {
         <h1 className="text-3xl font-bold text-foreground mb-2">Kayıt Ol</h1>
         <p className="text-muted-foreground mb-8">Komşularına katılmak için bilgilerini doldur.</p>
 
-        {!phoneVerified && (
-          <PhoneVerify phone={formData.phone} onVerified={() => setPhoneVerified(true)} />
-        )}
-        <form onSubmit={handleSubmit} className="space-y-4 pb-12">
+        {!phoneVerified ? (
+          <div className="space-y-6 animate-fade-in">
+            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+              <h3 className="font-bold text-blue-800 mb-1">Adım 1: Telefon Doğrulama</h3>
+              <p className="text-sm text-blue-600">Güvenli bir topluluk için öncelikle telefon numaranızı doğrulamanız gerekmektedir.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500 uppercase ml-1">Telefon (+90...)</label>
+              <input
+                name="phone"
+                value={formData.phone}
+                onChange={handlePhoneChange}
+                onFocus={handlePhoneFocus}
+                required
+                placeholder="+90 5XX XXX XX XX"
+                maxLength={17}
+                inputMode="numeric"
+                type="tel"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
+                disabled={isCodeSent}
+              />
+            </div>
+            
+            {!isCodeSent ? (
+              <button onClick={handleSendCode} disabled={isVerifying || formData.phone.replace(/\D/g, "").length < 12} className="w-full py-4 bg-primary text-white font-bold rounded-2xl disabled:opacity-50 flex items-center justify-center">
+                {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Doğrulama Kodu Gönder"}
+              </button>
+            ) : (
+              <div className="space-y-3 p-4 bg-gray-50 rounded-2xl border border-gray-200 mt-4">
+                <p className="text-sm text-center text-muted-foreground font-medium">Telefonunuza gönderilen 6 haneli kodu girin.</p>
+                <input value={verificationCode} onChange={e => setVerificationCode(e.target.value)} maxLength={6} placeholder="XXXXXX" inputMode="numeric" className="w-full text-center tracking-[0.5em] text-2xl font-bold px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                <button onClick={handleVerifyCode} disabled={isVerifying || verificationCode.length < 6} className="w-full py-4 bg-green-600 text-white font-bold rounded-2xl disabled:opacity-50 flex items-center justify-center shadow-lg shadow-green-500/30 mt-2">
+                  {isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Telefonu Doğrula"}
+                </button>
+                
+                {/* Sayaç ve Tekrar Gönder Alanı */}
+                <div className="text-center mt-4 pt-3 border-t border-gray-200/60">
+                  {countdown > 0 ? (
+                    <p className="text-xs text-gray-500 font-medium">Yeni kod için kalan süre: <span className="font-bold text-primary">{countdown}s</span></p>
+                  ) : (
+                    <button onClick={handleSendCode} disabled={isVerifying} className="text-xs font-bold text-primary hover:underline hover:text-primary/80 transition-colors">
+                      Kodu Tekrar Gönder
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {verificationError && <p className="text-red-500 text-sm text-center font-medium mt-2">{verificationError}</p>}
+          </div>
+        ) : (
+        <form onSubmit={handleSubmit} className="space-y-4 pb-12 animate-fade-in">
+          <div className="p-3 bg-green-50 rounded-xl border border-green-100 flex items-center gap-3 mb-2">
+            <CheckCircle2 className="w-6 h-6 text-green-600 shrink-0" />
+            <div>
+              <h3 className="text-sm font-bold text-green-800">Telefon Doğrulandı</h3>
+              <p className="text-xs text-green-600">{formData.phone}</p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-500 uppercase ml-1">Ad</label>
@@ -284,23 +354,6 @@ export default function Register() {
               <label className="text-xs font-bold text-gray-500 uppercase ml-1">Soyad</label>
               <input name="lastName" value={formData.lastName} onChange={handleChange} required className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" style={{ textTransform: 'uppercase' }} />
             </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Telefon (+90...)</label>
-            <input
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              onFocus={handlePhoneFocus}
-              required
-              placeholder="+90 5XX XXX XX XX"
-              maxLength={17}
-              pattern="\+90 5[0-9]{2} [0-9]{3} [0-9]{2} [0-9]{2}"
-              inputMode="numeric"
-              type="tel"
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
           </div>
 
           <div className="space-y-1.5">
@@ -381,6 +434,10 @@ export default function Register() {
                 <option key={district} value={district}>{district}</option>
               ))}
             </select>
+            {/* DEBUG: districts ve ilce verisi */}
+            <pre style={{fontSize:10, background:'#eee', color:'#333', marginTop:4, padding:4, borderRadius:4}}>
+              districts: {JSON.stringify(districts, null, 2)}
+            </pre>
           </div>
 
           <div className="space-y-1.5">
@@ -388,8 +445,8 @@ export default function Register() {
             <select
               required
               value={formData.neighborhood}
-              disabled={!formData.district || isLocationLoading}
-              onChange={(e) => setFormData((prev) => ({ ...prev, neighborhood: e.target.value }))}
+                    disabled={!formData.district || isLocationLoading}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, neighborhood: e.target.value }))}
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
             >
               <option value="">Mahalle seçiniz</option>
@@ -499,13 +556,16 @@ export default function Register() {
 
           <button
             type="submit"
-            disabled={isRegistering}
+            disabled={!phoneVerified || isRegistering}
             className="w-full py-4 mt-4 bg-secondary text-white font-bold rounded-2xl shadow-lg shadow-secondary/30 hover:-translate-y-0.5 transition-all disabled:opacity-70 flex items-center justify-center"
           >
             {isRegistering ? <Loader2 className="w-5 h-5 animate-spin" /> : "Hesap Oluştur"}
           </button>
         </form>
+        )}
       </div>
     </MobileContainer>
   );
 }
+
+export default Register;

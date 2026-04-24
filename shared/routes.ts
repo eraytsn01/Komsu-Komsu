@@ -19,16 +19,16 @@ export const errorSchemas = {
 
 // Base User type without password for frontend
 export const userResponseSchema = z.object({
-  id: z.number(),
+  id: z.union([z.string(), z.number()]),
   firstName: z.string(),
   lastName: z.string(),
   email: z.string(),
   phone: z.string(),
   locationCode: z.string(),
   avatarUrl: z.string().nullable().optional(),
-  buildingId: z.number().nullable(),
-  isAdmin: z.boolean().nullable(),
-  isApproved: z.boolean().nullable(),
+  buildingId: z.union([z.string(), z.number()]).nullable().optional(),
+  isAdmin: z.boolean().nullable().optional(),
+  isApproved: z.boolean().nullable().optional(),
 });
 
 export const api = {
@@ -51,6 +51,8 @@ export const api = {
         streetType: z.string().min(1),
         doorNo: z.string().min(1),
         innerDoorNo: z.string().min(1),
+        latitude: z.number().optional(),
+        longitude: z.number().optional(),
       }),
       responses: {
         201: z.object({ message: z.string(), isApproved: z.boolean(), userId: z.number() }),
@@ -285,7 +287,13 @@ export const api = {
     update: {
       method: 'PATCH' as const,
       path: '/api/users/me' as const,
-      input: z.object({ avatarUrl: z.string().optional(), firstName: z.string().optional(), lastName: z.string().optional() }),
+      input: z.object({ 
+        avatarUrl: z.string().optional(), 
+        firstName: z.string().optional(), 
+        lastName: z.string().optional(),
+        latitude: z.number().optional(),
+        longitude: z.number().optional()
+      }),
       responses: {
         200: userResponseSchema,
       }

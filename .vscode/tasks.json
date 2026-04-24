@@ -30,6 +30,13 @@
 				"$javac"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Android APK Build",
+			"type": "shell",
+			"command": "cd android && ./gradlew assembleDebug",
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

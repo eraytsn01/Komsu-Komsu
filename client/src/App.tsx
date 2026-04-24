@@ -1,3 +1,29 @@
+import React from "react";
+// Global error boundary için ek
+// Basit hata yakalama için try/catch ve fallback UI
+function ErrorBoundary({ children }: { children: React.ReactNode }) {
+  const [error, setError] = React.useState<Error | null>(null);
+  if (error) {
+    return (
+      <div style={{ color: 'red', padding: 16 }}>
+        <h2>Bir hata oluştu:</h2>
+        <pre>{error.message}</pre>
+      </div>
+    );
+  }
+  return (
+    <React.Fragment>
+      {React.Children.map(children, (child) => {
+        try {
+          return child;
+        } catch (err: any) {
+          setError(err);
+          return null;
+        }
+      })}
+    </React.Fragment>
+  );
+}
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -45,15 +71,18 @@ function ProtectedRoute({ component: Component, adminOnly = false }: { component
   return <Component />;
 }
 
+
 function Router() {
   const { user } = useAuth();
 
   return (
     <Switch>
-      {/* Public Routes */}
-      <Route path="/" component={Home} />
+      {/* Login ve Register dışındaki tüm rotalar korumalı */}
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+
+      {/* Giriş yapılmamışsa ana rota login'e yönlendirir */}
+      <Route path="/" component={() => <Redirect to="/login" />} />
 
       {/* Pending Route */}
       <Route path="/pending-approval">
@@ -83,14 +112,18 @@ function Router() {
 }
 
 function App() {
+  console.log("App render başladı");
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <NotificationWatcher />
-        <Router />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <NotificationWatcher />
+          <Router />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

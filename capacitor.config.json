@@ -1,0 +1,10 @@
+{
+  "appId": "com.komsukomsu.app",
+  "appName": "Komşu Komşu",
+  "webDir": "dist/public",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
+}
