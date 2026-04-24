@@ -196,7 +196,6 @@ async function resolveStreets(city: string, district: string, neighborhood: stri
 
 export function registerRoutes(app: express.Application) {
 
-
   // Sadece bellek içi session kullanılacak (veya Firebase tabanlı session yönetimi eklenebilir)
   app.use(session({
     secret: process.env.SESSION_SECRET || 'komsum-secret',
