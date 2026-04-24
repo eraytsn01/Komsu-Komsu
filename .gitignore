@@ -9,3 +9,4 @@ dist/public/firebase-messaging-sw.js
 .DS_Store
 *.zip
 .vercel
+serviceAccountKey.json
