@@ -237,7 +237,8 @@ export function registerRoutes(app: express.Application) {
       // Check if building exists
       let building = await typedStorage.getBuildingByLocationCode(locationCode);
       let isAdmin = false;
-      let isApproved = false;
+      // GELİŞTİRME AŞAMASI İÇİN GEÇİCİ OLARAK HERKESİ OTOMATİK ONAYLIYORUZ
+      let isApproved = true; 
 
       if (!building) {
         // First user creates the building and becomes admin
