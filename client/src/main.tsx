@@ -25,6 +25,22 @@ const appendAuthHeader = (headers?: HeadersInit) => {
 	return nextHeaders;
 };
 
+const handleAuthResponse = async (res: Response, url: string) => {
+	if (res.ok) {
+		if (url.includes('/api/auth/login') || url.includes('/api/auth/register')) {
+			try {
+				const clone = res.clone();
+				const data = await clone.json();
+				const id = data.id || data.userId;
+				if (id) localStorage.setItem("authUserId", String(id));
+			} catch (e) {}
+		} else if (url.includes('/api/auth/logout')) {
+			localStorage.removeItem("authUserId");
+		}
+	}
+	return res;
+};
+
 if (apiBaseUrl) {
 	const nativeFetch = window.fetch.bind(window);
 
@@ -48,7 +64,7 @@ if (apiBaseUrl) {
 			if (body !== undefined && body !== null) {
 				newInit.body = body;
 			}
-			return nativeFetch(url, newInit).catch((err) => {
+			return nativeFetch(url, newInit).then(res => handleAuthResponse(res, url)).catch((err) => {
 				console.error(`[API Hata] İstek atılamadı: ${url}\nBackend sunucusu kapalı olabilir veya IP adresi yanlıştır.`, err);
 				throw err;
 			});
@@ -57,7 +73,7 @@ if (apiBaseUrl) {
 		return nativeFetch(url, {
 			...init,
 			headers: appendAuthHeader(init?.headers),
-		}).catch((err) => {
+		}).then(res => handleAuthResponse(res, url)).catch((err) => {
 			console.error(`[API Hata] İstek atılamadı: ${url}\nBackend sunucusu kapalı olabilir veya IP adresi yanlıştır.`, err);
 			throw err;
 		});

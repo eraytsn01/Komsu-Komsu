@@ -73,7 +73,7 @@ function ProtectedRoute({ component: Component, adminOnly = false }: { component
 
 
 function Router() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
 
   return (
     <Switch>
@@ -81,8 +81,10 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
 
-      {/* Giriş yapılmamışsa ana rota login'e yönlendirir */}
-      <Route path="/" component={() => <Redirect to="/login" />} />
+      {/* Ana Rota: Yükleniyorsa splash, giriş yapılmışsa Durumlar, yapılmamışsa Landing (Home) */}
+      <Route path="/">
+        {isLoading ? <SplashScreen /> : user ? <ProtectedRoute component={Statuses} /> : <Home />}
+      </Route>
 
       {/* Pending Route */}
       <Route path="/pending-approval">
@@ -95,7 +97,7 @@ function Router() {
       </Route>
 
       {/* App Routes */}
-      <Route path="/statuses" component={() => <ProtectedRoute component={Statuses} />} />
+      <Route path="/statuses" component={() => <Redirect to="/" />} />
       <Route path="/adverts" component={() => <ProtectedRoute component={Adverts} />} />
       <Route path="/announcements" component={() => <ProtectedRoute component={Announcements} />} />
       <Route path="/chat" component={() => <ProtectedRoute component={Chat} />} />

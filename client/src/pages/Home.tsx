@@ -1,5 +1,6 @@
 import { MobileContainer } from "@/components/layout/MobileContainer";
-import { Download, Smartphone, ShieldCheck, Users } from "lucide-react";
+import { Download, Smartphone, ShieldCheck, Users, LogIn } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Home() {
   return (
@@ -15,14 +16,23 @@ export default function Home() {
             Mahallendeki yardımlaşmanın dijital hali. Artık komşularınla bir tıkla iletişimdesin!
           </p>
           {/* O meşhur İndir Butonu */}
+        <div className="flex flex-col gap-3">
           <a 
             href="/app-debug.apk" 
             download="KomsuKomsu.apk"
-            className="inline-flex items-center gap-3 bg-white text-indigo-700 px-8 py-4 rounded-2xl font-bold text-lg shadow-2xl hover:bg-indigo-50 transition-all active:scale-95"
+            className="inline-flex items-center justify-center gap-3 bg-white text-indigo-700 px-8 py-4 rounded-2xl font-bold text-lg shadow-2xl hover:bg-indigo-50 transition-all active:scale-95"
           >
             <Download className="w-6 h-6" />
             Uygulamayı İndir
           </a>
+          <Link 
+            href="/login" 
+            className="inline-flex items-center justify-center gap-2 bg-indigo-800/40 text-white border border-white/20 px-8 py-4 rounded-2xl font-bold text-sm hover:bg-indigo-800/60 transition-all active:scale-95"
+          >
+            <LogIn className="w-5 h-5" />
+            Web'den Giriş Yap
+          </Link>
+        </div>
         </div>
 
         {/* Özellikler Bölümü */}

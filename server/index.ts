@@ -13,6 +13,7 @@ import cors from "cors";
 
 const app = express();
 const httpServer = createServer(app);
+app.set("trust proxy", 1); // Railway (Proxy) arkasında güvenli (secure) cookie oluşturabilmek için zorunlu
 
 // Loglama fonksiyonu
 function log(message: string) {
