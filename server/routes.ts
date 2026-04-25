@@ -203,8 +203,8 @@ export function registerRoutes(app: express.Application) {
     saveUninitialized: false,
     cookie: {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      secure: process.env.NODE_ENV === "production"
+      sameSite: "lax", // Her ortamda (web/mobil) en stabil cookie ayarı
+      secure: false    // Railway proxy ve yerel testlerde sorun yaşatmaması için kapalı
     }
   }));
 
