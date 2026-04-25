@@ -161,19 +161,32 @@ function Register() {
     if (!formData.city || !formData.district || !formData.neighborhood) {
       setStreets(FALLBACK_STREETS);
       setFormData((prev) => ({ ...prev, street: "" }));
+      setManualStreet(false);
       return;
     }
     setIsLocationLoading(true);
+    setManualStreet(false);
+    setFormData((prev) => ({ ...prev, street: "" }));
+
     fetch(`/api/locations/streets?city=${encodeURIComponent(formData.city)}&district=${encodeURIComponent(formData.district)}&neighborhood=${encodeURIComponent(formData.neighborhood)}`)
       .then((res) => res.ok ? res.json() : [])
       .then((data) => {
         if (data?.length) {
           setStreets(data);
+          // Eğer sistem sokak bulamayıp mecburiyetten sadece mahalle adını döndüyse
+          // kullanıcıyı hiç uğraştırmadan "Elle Gir" modunu otomatik açıyoruz.
+          if (data.length === 1 && data[0].street === formData.neighborhood) {
+            setManualStreet(true);
+          }
         } else {
           setStreets(FALLBACK_STREETS);
+          setManualStreet(true);
         }
       })
-      .catch(() => setStreets(FALLBACK_STREETS))
+      .catch(() => {
+        setStreets(FALLBACK_STREETS);
+        setManualStreet(true);
+      })
       .finally(() => setIsLocationLoading(false));
   }, [formData.city, formData.district, formData.neighborhood]);
 
@@ -358,7 +371,7 @@ function Register() {
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-gray-500 uppercase ml-1">E-posta</label>
-            <input name="email" type="email" value={formData.email} onChange={handleChange} required className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
+            <input name="email" type="email" value={formData.email} onChange={handleChange} required placeholder="ornek@mail.com" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20" />
           </div>
 
           <div className="space-y-1.5">
@@ -434,10 +447,6 @@ function Register() {
                 <option key={district} value={district}>{district}</option>
               ))}
             </select>
-            {/* DEBUG: districts ve ilce verisi */}
-            <pre style={{fontSize:10, background:'#eee', color:'#333', marginTop:4, padding:4, borderRadius:4}}>
-              districts: {JSON.stringify(districts, null, 2)}
-            </pre>
           </div>
 
           <div className="space-y-1.5">
@@ -460,7 +469,7 @@ function Register() {
             <label className="text-xs font-bold text-gray-500 uppercase ml-1">Sokak / Cadde / Bulvar</label>
             <select
               required
-              value={formData.street}
+            value={manualStreet ? "__manual__" : formData.street}
               disabled={!formData.neighborhood || isLocationLoading}
               onChange={(e) => {
                 if (e.target.value === "__manual__") {
@@ -521,28 +530,30 @@ function Register() {
             </>
           )}
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Kapı Numarası</label>
-            <input
-              name="doorNo"
-              value={formData.doorNo}
-              onChange={handleChange}
-              required
-              placeholder="Örn: 12A"
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-500 uppercase ml-1">İç Kapı Numarası</label>
-            <input
-              name="innerDoorNo"
-              value={formData.innerDoorNo}
-              onChange={handleChange}
-              required
-              placeholder="Apartman değilse 0 yazılır"
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-gray-500 uppercase ml-1">Kapı No</label>
+          <input
+            name="doorNo"
+            value={formData.doorNo}
+            onChange={handleChange}
+            required
+            placeholder="Örn: 12A"
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-gray-500 uppercase ml-1">İç Kapı No</label>
+          <input
+            name="innerDoorNo"
+            value={formData.innerDoorNo}
+            onChange={handleChange}
+            required
+            placeholder="Yoksa 0 yazın"
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+      </div>
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-gray-500 uppercase ml-1">Şifre</label>
