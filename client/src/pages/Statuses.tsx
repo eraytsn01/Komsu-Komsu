@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { MobileContainer } from "@/components/layout/MobileContainer";
 import { useStatuses, useCreateStatus, useDeleteStatus } from "@/hooks/use-features";
-import { Plus, Camera, X, Image as ImageIcon, Trash2, CircleDashed, ChevronRight } from "lucide-react";
+import { Plus, Camera, X, Image as ImageIcon, Trash2, CircleDashed, ChevronRight, Eye, ChevronUp, User as UserIcon } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useAuth } from "@/hooks/use-auth";
@@ -45,6 +45,21 @@ export default function Statuses() {
   const [imageLoading, setImageLoading] = useState(false);
   const [viewingStatus, setViewingStatus] = useState<any>(null);
   const [confirmDelete, setConfirmDelete] = useState<any>(null);
+  const [viewers, setViewers] = useState<any[]>([]);
+  const [showViewers, setShowViewers] = useState(false);
+
+  // Durum açıldığında görüntüleyenleri getir
+  useEffect(() => {
+    if (viewingStatus && viewingStatus.userId === user?.id) {
+      apiRequest("GET", `/api/statuses/${viewingStatus.id}/viewers`)
+        .then(res => res.json())
+        .then(data => setViewers(data))
+        .catch(() => setViewers([]));
+    } else {
+      setViewers([]);
+      setShowViewers(false);
+    }
+  }, [viewingStatus, user?.id]);
 
   const handleImageFile = async (file: File | null | undefined) => {
     if (!file) return;
@@ -122,33 +137,46 @@ export default function Statuses() {
 
         {/* WhatsApp-style status list */}
         <div className="px-4 space-y-4">
-          <button
-            onClick={() => setIsAdding(true)}
-            className="w-full bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3 hover:bg-gray-50 transition-colors"
-          >
-            <div className="w-14 h-14 rounded-full bg-primary/10 border-2 border-dashed border-primary flex items-center justify-center text-primary shrink-0">
-              <Plus className="w-6 h-6" />
-            </div>
-            <div className="flex-1 text-left min-w-0">
-              <p className="text-sm font-bold text-foreground">Durumum</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {myGroup?.items?.length
-                  ? `Son güncelleme ${formatDistanceToNow(new Date(myGroup.items[0].createdAt), { addSuffix: true, locale: tr })}`
-                  : "Durum eklemek için dokun"}
-              </p>
-            </div>
+          <div className="w-full bg-white rounded-2xl p-3 border border-gray-100 shadow-sm flex items-center gap-3 transition-colors">
+            <button
+              onClick={() => myGroup?.items?.length ? openStatus(myGroup.items[0]) : setIsAdding(true)}
+              className="flex-1 flex items-center gap-3 text-left min-w-0"
+            >
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${myGroup?.items?.length ? 'bg-gradient-to-tr from-violet-500 to-fuchsia-500 p-[2px]' : 'bg-primary/10 border-2 border-dashed border-primary text-primary'}`}>
+                {myGroup?.items?.length ? (
+                  <div className="w-full h-full bg-white rounded-full p-[2px]">
+                    <div className="w-full h-full rounded-full bg-gray-100 overflow-hidden flex items-center justify-center text-violet-600 font-bold">
+                       {myGroup.items[0].imageUrl ? (
+                         <img src={myGroup.items[0].imageUrl} className="w-full h-full object-cover" alt="status" />
+                       ) : user?.avatarUrl ? (
+                         <img src={user.avatarUrl} className="w-full h-full object-cover" alt="avatar" />
+                       ) : (
+                         user?.firstName?.[0] || "?"
+                       )}
+                    </div>
+                  </div>
+                ) : (
+                  <Plus className="w-6 h-6" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-foreground">Durumum</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {myGroup?.items?.length
+                    ? `Son güncelleme ${formatDistanceToNow(new Date(myGroup.items[0].createdAt), { addSuffix: true, locale: tr })}`
+                    : "Durum eklemek için dokun"}
+                </p>
+              </div>
+            </button>
+
             {myGroup?.items?.length ? (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openStatus(myGroup.items[0]);
-                }}
-                className="p-2 text-violet-500 hover:bg-violet-50 rounded-xl transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1 shrink-0 px-2 border-l border-gray-100">
+                <button onClick={() => setIsAdding(true)} className="w-10 h-10 flex items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-200 rounded-full transition-colors">
+                  <Camera className="w-5 h-5" />
+                </button>
+              </div>
             ) : null}
-          </button>
+          </div>
 
           <div>
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-1 mb-2">Güncellemeler</p>
@@ -295,10 +323,49 @@ export default function Statuses() {
             </div>
           )}
           {viewingStatus.content && viewingStatus.imageUrl && (
-            <div className="absolute bottom-0 inset-x-0 p-6 bg-gradient-to-t from-black/70">
-              <p className="text-white text-sm">{viewingStatus.content}</p>
+            <div className="absolute bottom-0 inset-x-0 p-6 pb-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+              <p className="text-white text-sm font-medium">{viewingStatus.content}</p>
             </div>
           )}
+
+          {/* Görüntüleyenler Butonu (Sadece Kendi Durumumda Göster) */}
+          {viewingStatus.userId === user?.id && (
+            <div
+              className="absolute bottom-6 inset-x-0 flex flex-col items-center z-20 cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); setShowViewers(true); }}
+            >
+              <ChevronUp className="w-5 h-5 text-white/70 animate-bounce" />
+              <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full text-white font-bold text-xs">
+                <Eye className="w-4 h-4" /> {viewers.length} görüntülenme
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* WhatsApp Tarzı Görüntüleyenler Paneli */}
+      {showViewers && (
+        <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-[2rem] max-h-[70vh] flex flex-col z-[60] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] animate-in slide-in-from-bottom" onClick={(e) => e.stopPropagation()}>
+          <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mt-4 mb-2" />
+          <div className="px-5 pb-3 border-b flex justify-between items-center shrink-0">
+            <h3 className="font-black text-gray-800 flex items-center gap-2"><Eye className="w-5 h-5 text-primary" /> Görüntüleyenler ({viewers.length})</h3>
+            <button onClick={() => setShowViewers(false)} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><X className="w-4 h-4 text-gray-600" /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 pb-8">
+            {viewers.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm font-medium py-10">Henüz kimse görmedi.</p>
+            ) : (
+              viewers.map(v => (
+                <div key={v.id} className="flex items-center gap-3 p-3 border-b border-gray-50 last:border-0">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 overflow-hidden shrink-0 flex items-center justify-center text-primary">
+                    {v.avatarUrl ? <img src={v.avatarUrl} className="w-full h-full object-cover" /> : <UserIcon className="w-6 h-6" />}
+                  </div>
+                  <div className="flex-1"><p className="font-bold text-sm text-gray-900">{v.firstName} {v.lastName}</p></div>
+                  <span className="text-xs font-semibold text-gray-400">{format(new Date(v.viewedAt), "HH:mm")}</span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 
@@ -321,20 +388,6 @@ export default function Statuses() {
           </div>
         </div>
       )}
-      {/* APK İndirme Bölümü */}
-      <section id="download" style={{ textAlign: "center", padding: 32, marginBottom: 24 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 800, color: "#2563eb", marginBottom: 8 }}>Komşu Komşu Yayında!</h2>
-        <p style={{ fontSize: 16, marginBottom: 18 }}>Mahallendeki yardımlaşmaya katılmak için hemen indir.</p>
-        <a href="/app-debug.apk" download="KomsuKomsu.apk">
-          <button style={{ background: "#2563eb", color: "white", padding: "15px 30px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
-            Android APK İndir
-          </button>
-        </a>
-        <div style={{ marginTop: 10, color: '#b91c1c', fontSize: 13, fontWeight: 500 }}>
-          <span>Not: Android telefonlar Play Store dışı indirmelerde uyarı verebilir. <br />
-          "Uygulamamız güvenlidir, kurulum için bilinmeyen kaynaklara izin veriniz."</span>
-        </div>
-      </section>
     </MobileContainer>
   );
 } 

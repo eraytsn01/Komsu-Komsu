@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { MobileContainer } from "@/components/layout/MobileContainer";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { Home, Loader2, KeyRound } from "lucide-react";
+import { Loader2, KeyRound } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -38,9 +38,7 @@ export default function Login() {
       <div className="min-h-full flex flex-col p-8 animate-fade-in bg-white">
         <div className="flex-1 flex flex-col justify-center max-w-sm w-full mx-auto">
           
-          <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-8 mx-auto shadow-inner">
-            <Home className="w-8 h-8 text-primary" />
-          </div>
+          <img src="/logo.png" alt="Komşum Logo" className="w-24 h-24 mb-6 mx-auto rounded-[2rem] shadow-xl border-4 border-white" />
           
           <div className="text-center mb-10">
             <h1 className="text-4xl font-bold text-foreground mb-2">Komşum</h1>

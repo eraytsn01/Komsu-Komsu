@@ -213,11 +213,27 @@ export class FirebaseStorage {
     return statuses.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
   async recordStatusView(statusId: string, userId: string): Promise<void> {
-    // TODO: Gerçek implementasyon
+    const ref = this.db.ref(`status_views/${statusId}/${userId}`);
+    const snap = await ref.get();
+    if (!snap.exists()) {
+      // İlk kez görüntüleniyorsa zamanı kaydet
+      await ref.set(Date.now());
+    }
   }
   async getStatusViewers(statusId: string): Promise<any[]> {
-    // TODO: Gerçek implementasyon
-    return [];
+    const snap = await this.db.ref(`status_views/${statusId}`).get();
+    if (!snap.exists()) return [];
+    const views = snap.val();
+    const viewers: any[] = [];
+    for (const [uid, timestamp] of Object.entries(views as Record<string, number>)) {
+      const uSnap = await this.db.ref(`users/${uid}`).get();
+      if (uSnap.exists()) {
+        const u = uSnap.val() as User;
+        viewers.push({ id: uid, firstName: u.firstName, lastName: u.lastName, avatarUrl: u.avatarUrl, viewedAt: timestamp });
+      }
+    }
+    // En son görenler en üstte çıksın
+    return viewers.sort((a, b) => b.viewedAt - a.viewedAt);
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {

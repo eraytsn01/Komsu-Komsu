@@ -5,6 +5,7 @@ import { Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import App from "./App";
 import "./index.css";
+import { queryClient } from "./lib/queryClient";
 
 let apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "");
 
@@ -33,9 +34,13 @@ const handleAuthResponse = async (res: Response, url: string) => {
 				const data = await clone.json();
 				const id = data.id || data.userId;
 				if (id) localStorage.setItem("authUserId", String(id));
+				
+				// React Query önbelleğini anında güncelleyerek Router'ın kullanıcıyı dışarı atmasını kesin olarak engelliyoruz
+				queryClient.setQueryData(["/api/auth/me"], data);
 			} catch (e) {}
 		} else if (url.includes('/api/auth/logout')) {
 			localStorage.removeItem("authUserId");
+			queryClient.setQueryData(["/api/auth/me"], null);
 		}
 	}
 	return res;

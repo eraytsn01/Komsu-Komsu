@@ -5,6 +5,7 @@ import {
   useBuildingMessages, useSendBuildingMessage,
 } from "@/hooks/use-features";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 import {
   Send, Paperclip, MapPin, Video, Phone, MoreVertical, Search,
   ShieldAlert, UserX, Image as ImageIcon, MessageCircle, ChevronRight,
@@ -434,6 +435,7 @@ function PrivateChatView({ selectedUser, onBack }: { selectedUser: any; onBack: 
 // ── Main Chat List Page ───────────────────────────────────────────────────────
 export default function Chat() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"conversations" | "group" | "nearby" | "search">("conversations");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -443,16 +445,29 @@ export default function Chat() {
     setActiveTab("nearby");
   };
 
-  const { data: nearbyUsers = [] } = useNearbyUsers(0, 0);
+  // Aynı binadaki/adresteki komşuları çekiyoruz
+  const { data: buildingUsers = [] } = useQuery({
+    queryKey: ["/api/users"],
+    queryFn: async () => {
+      const res = await fetch("/api/users");
+      return res.ok ? res.json() : [];
+    }
+  });
+
+  // Sadece mesajlaştığımız kişileri çekiyoruz
+  const { data: convUsers = [] } = useQuery({
+    queryKey: ["/api/conversations"],
+    queryFn: async () => {
+      const res = await fetch("/api/conversations");
+      return res.ok ? res.json() : [];
+    }
+  });
+
   const { data: searchResults = [] } = useSearchUsers(searchQuery);
   const { data: groupMessages = [] } = useBuildingMessages();
 
-  // Build simple "conversation" list from nearbyUsers
-  const conversations = (nearbyUsers as any[]).map((u: any) => ({
-    ...u,
-    lastMessage: null,
-    unread: 0,
-  }));
+  // Yakındakiler sekmesi için kendimizi listeden çıkarıyoruz
+  const neighbors = (buildingUsers as any[]).filter((u: any) => u.id !== user?.id);
 
   // ── Private chat view ──
   if (selectedUser) {
@@ -467,7 +482,7 @@ export default function Chat() {
   if (showGroupChat) {
     return (
       <MobileContainer showNav={false}>
-        <GroupChatView onBack={() => setShowGroupChat(false)} nearbyUsers={nearbyUsers as any[]} />
+        <GroupChatView onBack={() => setShowGroupChat(false)} nearbyUsers={neighbors} />
       </MobileContainer>
     );
   }
@@ -505,7 +520,7 @@ export default function Chat() {
             {[
               { id: "conversations", label: "Sohbetler" },
               { id: "group", label: "Grup" },
-              { id: "nearby", label: "Yakındakiler" },
+              { id: "nearby", label: "Komşular" },
               { id: "search", label: "Ara" },
             ].map(tab => (
               <button
@@ -543,16 +558,31 @@ export default function Chat() {
           {/* CONVERSATIONS */}
           {activeTab === "conversations" && (
             <>
-              {conversations.length === 0 ? (
-                <Empty
-                  icon={<MessageCircle className="w-8 h-8 text-sky-500" />}
-                  title="Henüz sohbet yok"
-                  sub='Yakındakiler sekmesinden komşularını bul ya da "Bina Grubu" butonuna dokun.'
-                  tone="sky"
-                />
+              {(convUsers as any[]).length === 0 ? (
+                <div className="p-4 space-y-4">
+                  <Empty
+                    icon={<MessageCircle className="w-8 h-8 text-sky-500" />}
+                    title="Henüz sohbet yok"
+                    sub="Aşağıdaki listeden komşularına hemen mesaj gönderebilirsin."
+                    tone="sky"
+                  />
+                  {neighbors.length > 0 && (
+                    <div className="bg-white rounded-2xl border overflow-hidden mt-4 shadow-sm">
+                      <div className="px-3 py-2.5 bg-gray-50 border-b flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Binandaki Komşular</span>
+                        <span className="text-[10px] text-sky-500 font-bold bg-sky-50 px-2 py-1 rounded-lg">{neighbors.length} Kişi</span>
+                      </div>
+                      <div className="divide-y divide-gray-50">
+                        {neighbors.map((u: any) => (
+                          <UserRow key={u.id} u={u} onClick={() => setSelectedUser(u)} sub="Aynı binada (Komşunuz)" />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="divide-y divide-gray-50">
-                  {conversations.map((u: any) => (
+                  {(convUsers as any[]).map((u: any) => (
                     <UserRow key={u.id} u={u} onClick={() => setSelectedUser(u)} />
                   ))}
                 </div>
@@ -573,7 +603,7 @@ export default function Chat() {
                 </div>
                 <div className="flex-1 text-left">
                   <h3 className="font-bold text-sm text-foreground">Bina Grup Sohbeti</h3>
-                  <p className="text-[10px] text-gray-500">{(nearbyUsers as any[]).length} komşu • Mesaj gönder</p>
+                  <p className="text-[10px] text-gray-500">{neighbors.length} komşu • Mesaj gönder</p>
                 </div>
                 <div className="flex gap-1">
                   <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -615,11 +645,11 @@ export default function Chat() {
           {/* NEARBY */}
           {activeTab === "nearby" && (
             <div className="divide-y divide-gray-50">
-              {(nearbyUsers as any[]).length === 0 && (
-                <Empty icon={<UserIcon className="w-8 h-8 text-primary" />} title="Komşu bulunamadı" sub="500 m çevresinde kayıtlı kullanıcı yok." tone="primary" />
+              {neighbors.length === 0 && (
+                <Empty icon={<UserIcon className="w-8 h-8 text-primary" />} title="Komşu bulunamadı" sub="Aynı adreste kayıtlı başka bir komşu yok." tone="primary" />
               )}
-              {(nearbyUsers as any[]).map((u: any) => (
-                <UserRow key={u.id} u={u} onClick={() => setSelectedUser(u)} sub="~500m yakınınızda" />
+              {neighbors.map((u: any) => (
+                <UserRow key={u.id} u={u} onClick={() => setSelectedUser(u)} sub="Aynı binada (Komşunuz)" />
               ))}
             </div>
           )}
@@ -697,4 +727,3 @@ function Empty({ icon, title, sub, tone = "primary" }: { icon: React.ReactNode; 
     </div>
   );
 }
-

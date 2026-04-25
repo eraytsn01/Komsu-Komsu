@@ -439,7 +439,7 @@ export default function Adverts() {
                   placeholder="İlanınızı detaylı açıklayın…"
                   rows={3}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary resize-none"
-                  maxLength={500}
+                  maxLength={2000}
                 />
               </div>
 
@@ -449,10 +449,20 @@ export default function Adverts() {
                 <div className="flex gap-2">
                   <input
                     value={form.price}
-                    onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                    placeholder="0"
-                    type="number"
-                    min="0"
+                    onChange={e => {
+                      let val = e.target.value.replace(/[^0-9,]/g, "");
+                      const parts = val.split(',');
+                      if (parts.length > 2) val = parts[0] + ',' + parts.slice(1).join('');
+                      if (parts.length > 1) {
+                        val = Number(parts[0] || 0).toLocaleString('tr-TR') + ',' + parts[1].slice(0,2);
+                      } else if (val) {
+                        val = Number(val).toLocaleString('tr-TR');
+                      }
+                      setForm(f => ({ ...f, price: val }));
+                    }}
+                    placeholder="0,00"
+                    type="text"
+                    inputMode="decimal"
                     className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
                   />
                   <div className="flex gap-1">
@@ -484,48 +494,61 @@ export default function Adverts() {
                   accept="image/*"
                   capture="environment"
                   className="hidden"
-                  onChange={e => handleImageFile(e.target.files?.[0])}
+                  onChange={e => handleImageFiles(e.target.files)}
                 />
                 <input
                   ref={galleryRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
-                  onChange={e => handleImageFile(e.target.files?.[0])}
+                  onChange={e => handleImageFiles(e.target.files)}
                 />
 
-                {imagePreview ? (
+                {imagePreviews.length > 0 ? (
                   /* Preview */
-                  <div className="relative rounded-2xl overflow-hidden bg-gray-100 h-36">
-                    <img src={imagePreview} className="w-full h-full object-cover" />
-                    {imageLoading && (
-                      <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={removeImage}
-                      className="absolute top-2 right-2 w-8 h-8 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                    <div className="absolute bottom-0 inset-x-0 flex">
+                  <div className="space-y-2">
+                    <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                      {imagePreviews.map((img, idx) => (
+                        <div key={idx} className="relative rounded-2xl overflow-hidden bg-gray-100 h-24 w-24 shrink-0">
+                          <img src={img} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeImage(idx)}
+                            className="absolute top-1 right-1 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80 transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {imagePreviews.length < 20 && (
+                        <button
+                          type="button"
+                          onClick={() => galleryRef.current?.click()}
+                          className="h-24 w-24 shrink-0 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 flex flex-col items-center justify-center gap-1 hover:bg-primary/5 hover:text-primary transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                          <span className="text-[10px] font-bold">Ekle</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => cameraRef.current?.click()}
-                        className="flex-1 py-1.5 bg-black/50 text-white text-[10px] font-bold flex items-center justify-center gap-1 hover:bg-black/70 transition-colors"
+                        className="flex-1 py-2 bg-black/50 text-white text-[11px] font-bold flex items-center justify-center gap-1 rounded-xl hover:bg-black/70 transition-colors"
                       >
-                        <Camera className="w-3 h-3" /> Kamera
+                        <Camera className="w-4 h-4" /> Kamera
                       </button>
                       <button
                         type="button"
                         onClick={() => galleryRef.current?.click()}
-                        className="flex-1 py-1.5 bg-black/50 text-white text-[10px] font-bold flex items-center justify-center gap-1 hover:bg-black/70 transition-colors border-l border-white/20"
+                        className="flex-1 py-2 bg-black/50 text-white text-[11px] font-bold flex items-center justify-center gap-1 rounded-xl hover:bg-black/70 transition-colors"
                       >
-                        <ImageIcon className="w-3 h-3" /> Galeri
+                        <ImageIcon className="w-4 h-4" /> Galeri
                       </button>
                     </div>
+                    {imageLoading && <p className="text-xs text-primary font-medium animate-pulse">Yükleniyor...</p>}
                   </div>
                 ) : (
                   /* Picker buttons */

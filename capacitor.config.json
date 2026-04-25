@@ -1,6 +1,6 @@
 {
   "appId": "com.komsukomsu.app",
-  "appName": "Komşu Komşu",
+  "appName": "Komşum",
   "webDir": "dist/public",
   "bundledWebRuntime": false,
   "server": {
