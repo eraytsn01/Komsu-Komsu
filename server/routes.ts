@@ -336,7 +336,7 @@ export function registerRoutes(app: express.Application) {
           lastName: "Admin",
           email,
           phone: "+905555555555",
-          password: "password123",
+          password: "123456",
           locationCode,
           buildingId: building.id,
           isAdmin: true,
@@ -346,7 +346,7 @@ export function registerRoutes(app: express.Application) {
         });
         if (!building.adminId) await typedStorage.updateBuildingAdmin(building.id, user.id);
       }
-      res.status(200).send(`<h2>Test Kullanıcısı Hazır!</h2><p>Uygulamaya dönüp aşağıdaki bilgilerle giriş yapabilirsiniz:</p><ul><li><b>E-posta:</b> admin@komsu.com</li><li><b>Şifre:</b> password123</li></ul><p>Hesap otomatik olarak Yönetici (Admin) yetkisine sahip ve onaylıdır.</p>`);
+      res.status(200).send(`<h2>Test Kullanıcısı Hazır!</h2><p>Uygulamaya dönüp aşağıdaki bilgilerle giriş yapabilirsiniz:</p><ul><li><b>E-posta:</b> admin@komsu.com</li><li><b>Şifre:</b> 123456</li></ul><p>Hesap otomatik olarak Yönetici (Admin) yetkisine sahip ve onaylıdır.</p>`);
     } catch (err: any) {
       res.status(500).send("Hata: " + err.message);
     }
@@ -399,7 +399,7 @@ export function registerRoutes(app: express.Application) {
           lastName: "Admin",
           email: "admin@komsu.com",
           phone: "+905555555555",
-          password: "password123",
+          password: "123456",
           locationCode,
           buildingId: building.id,
           isAdmin: true,
@@ -892,7 +892,7 @@ export function registerRoutes(app: express.Application) {
           lastName: "Admin",
           email,
           phone: "+905555555555",
-          password: "password123",
+          password: "123456",
           locationCode,
           buildingId: building.id,
           isAdmin: true,
@@ -901,15 +901,15 @@ export function registerRoutes(app: express.Application) {
           innerDoorNo: "1",
         });
         if (!building.adminId) await typedStorage.updateBuildingAdmin(building.id, user.id);
-        console.log("✅ OTOMATİK TEST KULLANICISI OLUŞTURULDU: admin@komsu.com / password123");
+        console.log("✅ OTOMATİK TEST KULLANICISI OLUŞTURULDU: admin@komsu.com / 123456");
       } else {
         // EĞER KULLANICI ZATEN VARSA KESİNLİKLE ONAYLI VE ADMİN OLDUĞUNDAN EMİN OL
         await typedStorage.updateUser(user.id, { 
           isApproved: true, 
           isAdmin: true, 
-          password: "password123" 
+          password: "123456" 
         });
-        console.log("✅ TEST KULLANICISI GÜNCELLENDİ VE HAZIR: admin@komsu.com / password123");
+        console.log("✅ TEST KULLANICISI GÜNCELLENDİ VE HAZIR: admin@komsu.com / 123456");
       }
     } catch (err) {
       console.error("Test kullanıcısı otomatik oluşturulurken hata:", err);
