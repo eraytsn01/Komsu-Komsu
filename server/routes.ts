@@ -210,7 +210,6 @@ export function registerRoutes(app: express.Application) {
   app.post(api.auth.register.path, async (req: Request, res: Response) => {
     try {
       const input = api.auth.register.input.parse(req.body);
-      
       if (input.password !== input.passwordConfirm) {
         return res.status(400).json({ message: "Passwords do not match" });
       }
@@ -222,7 +221,6 @@ export function registerRoutes(app: express.Application) {
 
       const streets = await resolveStreets(input.city, input.district, input.neighborhood);
       // Sokak verisi eksik olabileceği için listede olmayan manuel girişlere izin veriyoruz.
-
 
       const locationCode = [
         input.city,
@@ -253,22 +251,28 @@ export function registerRoutes(app: express.Application) {
 
       // id olarak email kullanılıyor
       const safeId = input.email.replace(/[.#$\[\]]/g, '_');
-      const user = await typedStorage.createUser(safeId, {
+
+      // Firebase undefined değerleri kesinlikle kabul etmediği için
+      // opsiyonel alanları objeye baştan eklemiyoruz.
+      const userData: Record<string, any> = {
         firstName: input.firstName,
         lastName: input.lastName,
         email: input.email,
         phone: input.phone,
-        password: input.password, // In MVP we store as plain. In prod use bcrypt!
+        password: input.password,
         locationCode,
         buildingId: building.id,
-        avatarUrl: input.avatarUrl || undefined,
         isAdmin,
         isApproved,
         doorNo: input.doorNo,
         innerDoorNo: input.innerDoorNo,
-        latitude: input.latitude,
-        longitude: input.longitude,
-      });
+      };
+      
+      if (input.avatarUrl) userData.avatarUrl = input.avatarUrl;
+      if (input.latitude !== undefined && input.latitude !== null) userData.latitude = input.latitude;
+      if (input.longitude !== undefined && input.longitude !== null) userData.longitude = input.longitude;
+
+      const user = await typedStorage.createUser(safeId, userData);
 
       if (isAdmin && !building.adminId) {
         await typedStorage.updateBuildingAdmin(building.id, user.id);
@@ -781,7 +785,16 @@ export function registerRoutes(app: express.Application) {
 
   app.patch('/api/users/me', requireAuth, async (req: Request, res: Response) => {
     const input = api.users.update.input.parse(req.body);
-    const updatedUser = await typedStorage.updateUser(req.session.userId!, input);
+    
+    // Firebase için undefined temizliği
+    const cleanInput: Record<string, any> = {};
+    if (input.avatarUrl !== undefined) cleanInput.avatarUrl = input.avatarUrl;
+    if (input.firstName !== undefined) cleanInput.firstName = input.firstName;
+    if (input.lastName !== undefined) cleanInput.lastName = input.lastName;
+    if (input.latitude !== undefined && input.latitude !== null) cleanInput.latitude = input.latitude;
+    if (input.longitude !== undefined && input.longitude !== null) cleanInput.longitude = input.longitude;
+
+    const updatedUser = await typedStorage.updateUser(req.session.userId!, cleanInput);
     const { password, ...rest } = updatedUser || {};
     res.json(rest);
   });

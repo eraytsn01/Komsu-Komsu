@@ -220,10 +220,15 @@ function Register() {
         finalAvatarUrl = await getDownloadURL(imageRef);
       }
 
+      // undefined olan alanları göndermemek için formData'yı temizle
+      const cleanData: Record<string, any> = { ...formData, avatarUrl: finalAvatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=" + formData.firstName };
+      Object.keys(cleanData).forEach(key => {
+        if (cleanData[key] === undefined) delete cleanData[key];
+      });
       const res = await fetch(`/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, avatarUrl: finalAvatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=" + formData.firstName }),
+        body: JSON.stringify(cleanData),
       });
 
       if (!res.ok) {
