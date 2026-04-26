@@ -301,6 +301,10 @@ function Register() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         
+        <div className="flex justify-center mb-6">
+          <img src="/logo.png" alt="Komşum Logo" className="w-32 h-32 object-contain drop-shadow-md rounded-2xl" />
+        </div>
+
         <h1 className="text-3xl font-bold text-foreground mb-2">Kayıt Ol</h1>
         <p className="text-muted-foreground mb-8">Komşularına katılmak için bilgilerini doldur.</p>
 
