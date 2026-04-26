@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Paperclip, Smile, MapPin, Send, Plus } from "lucide-react";
 
-export default function Chat() {
+export function ChatDummy() {
   const [messages, setMessages] = useState([
     { id: 1, fromMe: false, text: "Merhaba! Size nasıl yardımcı olabilirim?", time: "09:30" },
     { id: 2, fromMe: true, text: "Merhaba, bir sorum olacaktı.", time: "09:31" },
@@ -97,8 +97,10 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
   let content;
+
+function DanglingCodeBlock() {
+  let content;
   if (selectedUser) {
-    content = <PrivateChatView selectedUser={selectedUser} onBack={() => setSelectedUser(null)} onStartCall={(t, u) => setActiveCall({ type: t, targetName: `${u.firstName} ${u.lastName}`, targetAvatar: u.avatarUrl, targetId: u.id })} />;
   } else if (showGroupChat) {
     content = <GroupChatView onBack={() => setShowGroupChat(false)} nearbyUsers={neighbors} onStartCall={(t) => setActiveCall({ type: t, targetName: "Bina Grup Araması", groupMembers: neighbors })} />;
   } else {
@@ -172,8 +174,6 @@ import { apiRequest } from "@/lib/queryClient";
               socket.emit("callUser", { userToCall: targetId, signalData: offer, from: user?.id, name: `${user?.firstName} ${user?.lastName}`, avatar: user?.avatarUrl, type });
             });
           }
-        })
-        .catch(err => console.log("Medya izni alınamadı:", err));
     }
     return () => {
       if (stream) {
@@ -328,6 +328,7 @@ import { apiRequest } from "@/lib/queryClient";
       </div>
     </div>
   );
+}
 }
 
 // ── Group Chat View ───────────────────────────────────────────────────────────
