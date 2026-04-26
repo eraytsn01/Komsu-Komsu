@@ -1,6 +1,6 @@
 import React from "react";
 // Global error boundary için ek
-// Basit hata yakalama için try/catch ve fallback UI
+// Basit hata yakalama için try/catch ve yedek (fallback) arayüz
 function ErrorBoundary({ children }: { children: React.ReactNode }) {
   const [error, setError] = React.useState<Error | null>(null);
   if (error) {
@@ -77,26 +77,26 @@ function Router() {
 
   return (
     <Switch>
-      {/* Login ve Register dışındaki tüm rotalar korumalı */}
+      {/* Giriş ve kayıt dışındaki tüm rotalar korumalı */}
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
 
-      {/* Ana Rota: Yükleniyorsa splash, giriş yapılmışsa Durumlar, yapılmamışsa Landing (Home) */}
+      {/* Ana rota: Yükleniyorsa splash, giriş yapılmışsa Durumlar, yapılmamışsa Ana Sayfa (Home) */}
       <Route path="/">
         {isLoading ? <SplashScreen /> : user ? <ProtectedRoute component={Statuses} /> : <Home />}
       </Route>
 
-      {/* Pending Route */}
+      {/* Onay bekleyen rota */}
       <Route path="/pending-approval">
         {user ? <PendingApproval /> : <Redirect to="/login" />}
       </Route>
 
-      {/* Complete Profile Route */}
+      {/* Profil tamamlama rotası */}
       <Route path="/complete-profile">
         {user ? <CompleteProfile /> : <Redirect to="/login" />}
       </Route>
 
-      {/* App Routes */}
+      {/* Uygulama rotaları */}
       <Route path="/statuses" component={() => <Redirect to="/" />} />
       <Route path="/adverts" component={() => <ProtectedRoute component={Adverts} />} />
       <Route path="/announcements" component={() => <ProtectedRoute component={Announcements} />} />
@@ -104,10 +104,10 @@ function Router() {
       <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/settings/notifications" component={() => <ProtectedRoute component={NotificationSettings} />} />
 
-      {/* Admin Route */}
+      {/* Yönetici rotası */}
       <Route path="/admin/approvals" component={() => <ProtectedRoute component={Approvals} adminOnly={true} />} />
 
-      {/* Fallback */}
+      {/* Yedek rota */}
       <Route component={NotFound} />
     </Switch>
   );
@@ -115,6 +115,15 @@ function Router() {
 
 function App() {
   console.log("App render başladı");
+
+  // Uygulama ilk açıldığında bildirim izni iste
+  React.useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
 
   return (
     <ErrorBoundary>

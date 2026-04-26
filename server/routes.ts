@@ -605,7 +605,6 @@ export function registerRoutes(app: express.Application) {
   app.post(api.announcements.create.path, requireAuth, async (req: Request, res: Response) => {
     const input = api.announcements.create.input.parse(req.body);
     const user = await storage.getUser(req.session.userId!);
-    if (!user?.isAdmin) return res.status(403).json({ message: "Only admin can create announcements" });
     const announcement = await typedStorage.createAnnouncement(user.id, { ...input, userId: user.id, buildingId: user.buildingId! });
 
     void notifyBuildingUsers(user.buildingId!, user.id, {
@@ -664,13 +663,22 @@ export function registerRoutes(app: express.Application) {
   app.get(api.messages.list.path, requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
     const messages = await typedStorage.getMessagesByBuilding(user!.buildingId!);
-    res.status(200).json(messages);
+    
+    // Şifreleri çözerek gönderiyoruz
+    const decryptedMessages = messages.map(msg => ({ ...msg, content: decryptMessage(msg.content) }));
+    res.status(200).json(decryptedMessages);
   });
 
   app.post(api.messages.create.path, requireAuth, async (req: Request, res: Response) => {
     const input = api.messages.create.input.parse(req.body);
     const user = await storage.getUser(req.session.userId!);
-    const message = await typedStorage.createMessage(user!.id, { ...input, senderId: user!.id, buildingId: user!.buildingId! });
+
+    // 1. Yasaklı Kelime Filtresi
+    checkForbiddenWordsAndAlert(String(input.content), user!.id);
+
+    // 2. Mesajı Veritabanı İçin Şifrele
+    const encryptedContent = encryptMessage(String(input.content));
+    const message = await typedStorage.createMessage(user!.id, { ...input, content: encryptedContent, senderId: user!.id, buildingId: user!.buildingId! });
 
     void notifyBuildingUsers(user!.buildingId!, user!.id, {
       title: "Yeni mesaj",
@@ -678,7 +686,7 @@ export function registerRoutes(app: express.Application) {
       data: { type: "message", id: String(message.id), url: "/chat" },
     }).catch((err) => console.error("Push notify error (message):", err));
 
-    res.status(201).json(message);
+    res.status(201).json({ ...message, content: input.content });
   });
 
   app.delete('/api/messages/:id', requireAuth, async (req: Request, res: Response) => {
@@ -779,7 +787,7 @@ export function registerRoutes(app: express.Application) {
   // Users
   app.get('/api/users', requireAuth, async (req: Request, res: Response) => {
     const user = await storage.getUser(req.session.userId!);
-    const users = await typedStorage.getAllUsersInBuilding(user!.buildingId!);
+    const users = await typedStorage.getAllUsersInNeighborhood(user!.locationCode!);
     res.json(users.map(u => {
       const { password, ...rest } = u;
       return rest;

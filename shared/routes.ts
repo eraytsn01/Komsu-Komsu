@@ -1,5 +1,5 @@
 import { z } from 'zod';
-// import edilen eski drizzle/sql şemaları kaldırıldı. Sadece zod ve ortak tipler kullanılacak.
+// Eski drizzle/sql şemaları kaldırıldı. Sadece zod ve ortak tipler kullanılacak.
 
 export const errorSchemas = {
   validation: z.object({

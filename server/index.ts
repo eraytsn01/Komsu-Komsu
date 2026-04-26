@@ -10,6 +10,7 @@ import { serveStatic } from "./static";
 import path from "path";
 import { createServer } from "http";
 import cors from "cors";
+import { Server as SocketIOServer } from "socket.io";
 
 const app = express();
 const httpServer = createServer(app);
@@ -19,6 +20,41 @@ app.set("trust proxy", 1); // Railway (Proxy) arkasında güvenli (secure) cooki
 function log(message: string) {
   console.log(`[express] ${message}`);
 }
+
+// --- WebRTC (WhatsApp Araması) Sinyalleşme Sunucusu ---
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: "*", // Tüm platformlardan (mobil/web) erişime izin ver
+    methods: ["GET", "POST"]
+  }
+});
+
+io.on("connection", (socket) => {
+  // Kullanıcı uygulamaya girdiğinde kendi ID'siyle gizli bir odaya katılır
+  socket.on("join", (userId) => {
+    socket.join(userId);
+  });
+
+  // Biri arandığında karşı tarafa çalma sinyali gönderir
+  socket.on("callUser", ({ userToCall, signalData, from, name, avatar, type }) => {
+    io.to(userToCall).emit("incomingCall", { signal: signalData, from, name, avatar, type });
+  });
+
+  // Arama açıldığında kabul sinyali gönderir
+  socket.on("answerCall", (data) => {
+    io.to(data.to).emit("callAccepted", data.signal);
+  });
+
+  // ICE (Ağ bağlantı) adaylarını iki telefon arasında iletir
+  socket.on("iceCandidate", (data) => {
+    io.to(data.to).emit("iceCandidate", data.candidate);
+  });
+
+  // Arama kapatıldığında veya reddedildiğinde
+  socket.on("endCall", (data) => {
+    io.to(data.to).emit("callEnded");
+  });
+});
 
 // CORS ayarları EN BAŞTA ve sadece bir kez
 app.use(

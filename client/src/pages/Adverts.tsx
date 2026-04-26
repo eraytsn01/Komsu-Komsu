@@ -106,11 +106,11 @@ export default function Adverts() {
     description: "",
     price: "",
     currency: "₺",
-    imageUrl: "",
+    imageUrls: [] as string[],
     category: "Diğer",
     visibilityRadius: 500,
   });
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [imageLoading, setImageLoading] = useState(false);
   const [error, setError] = useState("");
   const [closeReason, setCloseReason] = useState<"sold" | "rented" | "withdrawn">("sold");
@@ -119,13 +119,29 @@ export default function Adverts() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
-  const handleImageFile = async (file: File | null | undefined) => {
-    if (!file) return;
+  const handleImageFiles = async (files: FileList | null | undefined) => {
+    if (!files || files.length === 0) return;
+    const newFiles = Array.from(files);
+
+    if (form.imageUrls.length + newFiles.length > 20) {
+      setError("En fazla 20 fotoğraf yükleyebilirsiniz.");
+      return;
+    }
+
     setImageLoading(true);
+    setError("");
     try {
-      const dataUrl = await compressImage(file);
-      setImagePreview(dataUrl);
-      setForm(f => ({ ...f, imageUrl: dataUrl }));
+      const newUrls: string[] = [];
+      for (const file of newFiles) {
+        if (file.size > 500 * 1024 * 1024) {
+          setError("Bir fotoğraf maksimum 500 MB olabilir.");
+          continue;
+        }
+        const dataUrl = await compressImage(file);
+        newUrls.push(dataUrl);
+      }
+      setImagePreviews(prev => [...prev, ...newUrls]);
+      setForm(f => ({ ...f, imageUrls: [...f.imageUrls, ...newUrls] }));
     } catch {
       setError("Görsel yüklenemedi.");
     } finally {
@@ -133,16 +149,16 @@ export default function Adverts() {
     }
   };
 
-  const removeImage = () => {
-    setImagePreview(null);
-    setForm(f => ({ ...f, imageUrl: "" }));
+  const removeImage = (index: number) => {
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    setForm(f => ({ ...f, imageUrls: f.imageUrls.filter((_, i) => i !== index) }));
     if (cameraRef.current) cameraRef.current.value = "";
     if (galleryRef.current) galleryRef.current.value = "";
   };
 
   const resetForm = () => {
-    setForm({ title: "", description: "", price: "", currency: "₺", imageUrl: "", category: "Diğer", visibilityRadius: 500 });
-    setImagePreview(null);
+    setForm({ title: "", description: "", price: "", currency: "₺", imageUrls: [], category: "Diğer", visibilityRadius: 500 });
+    setImagePreviews([]);
     setError("");
   };
 
@@ -155,7 +171,7 @@ export default function Adverts() {
         description: form.description,
         price: form.price || undefined,
         currency: form.currency,
-        imageUrl: form.imageUrl || undefined,
+        imageUrl: form.imageUrls.length > 0 ? form.imageUrls.join("|||") : undefined,
         visibilityRadius: form.visibilityRadius,
       });
       setIsAdding(false);

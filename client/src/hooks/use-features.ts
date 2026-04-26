@@ -239,7 +239,7 @@ export function useMessages(receiverId?: number) {
     queryKey: ['/api/private-messages', receiverId],
     queryFn: async () => {
       if (!receiverId) return [];
-      const res = await fetch(`/api/private-messages/${receiverId}`, { credentials: "include" });
+      const res = await fetch(`https://komsukomsu.online/api/private-messages/${receiverId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch messages");
       return res.json();
     },
@@ -252,7 +252,7 @@ export function useSendMessage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: { receiverId: number, content: string, fileUrl?: string, fileName?: string, location?: string }) => {
-      const res = await fetch('/api/private-messages', {
+      const res = await fetch('https://komsukomsu.online/api/private-messages', {
         method: 'POST',
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -272,7 +272,7 @@ export function useBuildingMessages() {
   return useQuery({
     queryKey: ['/api/messages'],
     queryFn: async () => {
-      const res = await fetch('/api/messages', { credentials: "include" });
+      const res = await fetch('https://komsukomsu.online/api/messages', { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch group messages");
       return res.json();
     },
@@ -284,7 +284,7 @@ export function useSendBuildingMessage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: { content: string }) => {
-      const res = await fetch('/api/messages', {
+      const res = await fetch('https://komsukomsu.online/api/messages', {
         method: 'POST',
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

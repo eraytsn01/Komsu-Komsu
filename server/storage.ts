@@ -128,7 +128,28 @@ export class FirebaseStorage {
     const snap = await this.db.ref(`users/${userId}`).get();
     return { id: userId, ...snap.val() };
   }
-  async searchUsers(q: string): Promise<any[]> { return []; }
+  async searchUsers(q: string): Promise<any[]> {
+    const snap = await this.db.ref("users").get();
+    if (!snap.exists()) return [];
+    const users = snap.val();
+    const result: User[] = [];
+    const query = q.toLowerCase().replace(/\s+/g, '');
+    const queryPhone = q.replace(/\D/g, '');
+
+    for (const [id, user] of Object.entries(users as Record<string, any> || {})) {
+      const u = user as User;
+      const fullName = `${u.firstName || ''}${u.lastName || ''}`.toLowerCase();
+      const phone = (u.phone || '').replace(/\D/g, '');
+
+      if (
+        (query.length >= 3 && fullName.includes(query)) ||
+        (queryPhone.length > 3 && phone.includes(queryPhone))
+      ) {
+        result.push({ ...u, id });
+      }
+    }
+    return result;
+  }
   
   async getNearbyUsers(lat: number, lon: number, radius: number): Promise<any[]> {
     const snap = await this.db.ref("users").get();
@@ -160,6 +181,21 @@ export class FirebaseStorage {
     const result: User[] = [];
     for (const [id, user] of Object.entries(users as Record<string, any> || {})) {
       if ((user as User).buildingId === buildingId) {
+        result.push({ ...(user as User), id });
+      }
+    }
+    return result;
+  }
+  async getAllUsersInNeighborhood(locationCode: string): Promise<User[]> {
+    const snap = await this.db.ref("users").get();
+    if (!snap.exists()) return [];
+    const users = snap.val();
+    const result: User[] = [];
+    const parts = locationCode.split("|");
+    const prefix = parts.slice(0, 3).join("|") + "|"; // city|district|neighborhood|
+
+    for (const [id, user] of Object.entries(users as Record<string, any> || {})) {
+      if ((user as User).locationCode?.startsWith(prefix)) {
         result.push({ ...(user as User), id });
       }
     }

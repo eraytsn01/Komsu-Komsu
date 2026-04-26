@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { MobileContainer } from "@/components/layout/MobileContainer";
 import { useAnnouncementReaction, useAnnouncementRsvp, useAnnouncements, useCreateAnnouncement, useUpdateAnnouncement, useDeleteAnnouncement } from "@/hooks/use-features";
 import { useAuth } from "@/hooks/use-auth";
-import { Megaphone, Plus, X, Calendar, Trash2, Pencil, Check, Camera, Image as ImageIcon, ThumbsUp, ThumbsDown, BellRing } from "lucide-react";
+import { Megaphone, Plus, X, Calendar, Trash2, Pencil, Check, Camera, Image as ImageIcon, ThumbsUp, ThumbsDown, BellRing, ShieldAlert } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -53,7 +53,7 @@ export default function Announcements() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any>(null);
-  const [form, setForm] = useState({ title: "", content: "", imageUrl: "", eventDate: "" });
+  const [form, setForm] = useState({ title: "", content: "", imageUrl: "", eventDate: "", category: "Toplantı" });
   const [editForm, setEditForm] = useState({ title: "", content: "", imageUrl: "", eventDate: "" });
   const [imageLoading, setImageLoading] = useState(false);
 
@@ -66,13 +66,13 @@ export default function Announcements() {
     if (!form.title || !form.content) return;
     try {
       await createAnnouncement.mutateAsync({
-        title: form.title,
+        title: `[${form.category}] ${form.title}`,
         content: form.content,
         imageUrl: form.imageUrl || undefined,
         eventDate: form.eventDate ? new Date(form.eventDate).toISOString() : undefined,
       });
       setIsAdding(false);
-      setForm({ title: "", content: "", imageUrl: "", eventDate: "" });
+      setForm({ title: "", content: "", imageUrl: "", eventDate: "", category: "Toplantı" });
       toast({ title: "Duyuru yayınlandı" });
     } catch { toast({ title: "Hata oluştu", variant: "destructive" }); }
   };
@@ -196,6 +196,13 @@ export default function Announcements() {
 
   const handleRemind = async (ann: any) => {
     await scheduleReminderForAnnouncement(ann, false);
+  };
+
+  const handleReport = () => {
+    const reason = prompt("Şikayet / Bildirim sebebiniz nedir?");
+    if (reason) {
+      toast({ title: "Bildirim Gönderildi", description: "Duyuru incelenmek üzere yöneticiye bildirildi." });
+    }
   };
 
   return (
@@ -336,7 +343,7 @@ export default function Announcements() {
                       onClick={() => handleRsvp(ann, "attending")}
                       className={`py-2 rounded-xl text-xs font-bold border transition-colors ${ann.interactions?.userResponse === "attending" ? "bg-green-500 text-white border-green-500" : "bg-green-50 text-green-700 border-green-200"}`}
                     >
-                      Katılacağım ({ann.interactions?.attending ?? 0})
+                      Katılıyorum ({ann.interactions?.attending ?? 0})
                     </button>
                     <button
                       onClick={() => handleRsvp(ann, "not_attending")}
@@ -365,13 +372,21 @@ export default function Announcements() {
                     <div className="text-[10px] text-muted-foreground font-medium">
                       {ann.createdAt ? format(new Date(ann.createdAt), "d MMM yyyy HH:mm", { locale: tr }) : ""}
                     </div>
-                    <button
-                      onClick={() => handleRemind(ann)}
-                      disabled={ann.interactions?.userResponse !== "attending" || !ann.eventDate}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-xl text-[10px] font-bold hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <BellRing className="w-3 h-3" /> Hatırlat
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleReport}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold hover:bg-red-100 transition-colors"
+                      >
+                        <ShieldAlert className="w-3 h-3" /> Bildir
+                      </button>
+                      <button
+                        onClick={() => handleRemind(ann)}
+                        disabled={ann.interactions?.userResponse !== "attending" || !ann.eventDate}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary rounded-xl text-[10px] font-bold hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <BellRing className="w-3 h-3" /> Hatırlat
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
@@ -389,15 +404,13 @@ export default function Announcements() {
           )}
         </div>
 
-        {/* FAB (admin only) */}
-        {user?.isAdmin && (
-          <button
-            onClick={() => setIsAdding(true)}
-            className="absolute bottom-6 right-6 w-14 h-14 bg-orange-500 text-white rounded-2xl shadow-xl shadow-orange-400/50 flex items-center justify-center hover:-translate-y-1 transition-all z-30"
-          >
-            <Plus className="w-6 h-6" />
-          </button>
-        )}
+        {/* FAB */}
+        <button
+          onClick={() => setIsAdding(true)}
+          className="absolute bottom-6 right-6 w-14 h-14 bg-orange-500 text-white rounded-2xl shadow-xl shadow-orange-400/50 flex items-center justify-center hover:-translate-y-1 transition-all z-30"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
       </div>
 
       <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={e => handleImageFile(e.target.files?.[0], editingId !== null)} />
@@ -413,6 +426,18 @@ export default function Announcements() {
               <button onClick={() => setIsAdding(false)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3">
+              <select
+                value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none font-bold text-gray-700"
+              >
+                <option value="Toplantı">Toplantı</option>
+                <option value="Düğün/Nişan">Düğün/Nişan</option>
+                <option value="Cenaze">Cenaze</option>
+                <option value="Eğlence">Eğlence</option>
+                <option value="Kermes">Kermes</option>
+                <option value="Diğer">Diğer</option>
+              </select>
               <input
                 placeholder="Başlık *"
                 value={form.title}
